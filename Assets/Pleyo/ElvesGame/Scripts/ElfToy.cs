@@ -27,7 +27,8 @@ public class ElfToy
 
     int _state; // 0 on the belt, 1 held / parked (moved by others), 2 in the bin (physics)
     GameObject _raw, _carved, _gift;
-    Renderer[] _carvedRenderers, _giftRenderers, _all;
+    Renderer[] _carvedRenderers, _giftRenderers, _all, _rawRenderers;
+    Material[][] _rawOpaque;
     Material[][] _carvedSource, _giftSource;
     TextMeshPro _mark;
     Color? _paintColor, _wrapColor;
@@ -37,7 +38,7 @@ public class ElfToy
     GameObject _ownerRing;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatics() { Glowing.Clear(); _block = null; }
+    static void ResetStatics() { Glowing.Clear(); GhostMaterials.Clear(); _block = null; }
 
     public void Init(Transform parent, float x, float beltY, int kind)
     {
@@ -48,11 +49,18 @@ public class ElfToy
         PlaceOnBelt(beltY);
         ElfAssets a = ElfArt.Assets;
 
+        Quaternion facing = Root.rotation;
+        Root.rotation = Quaternion.identity; // models measured upright (the ring turns the belt)
         _raw = Model(a != null ? a.RawBlock : null, "Raw", SIZE * 0.8f, false, new Color(0.75f, 0.55f, 0.35f));
         int carvedIndex = a != null && a.CarvedToys != null && a.CarvedToys.Length > 0 ? kind % a.CarvedToys.Length : -1;
         _carved = Model(carvedIndex >= 0 ? a.CarvedToys[carvedIndex] : null, "Carved", SIZE, true, new Color(0.86f, 0.68f, 0.46f));
         int giftIndex = a != null && a.Presents != null && a.Presents.Length > 0 ? Random.Range(0, a.Presents.Length) : -1;
         _gift = Model(giftIndex >= 0 ? a.Presents[giftIndex] : null, "Gift", SIZE * 1.05f, false, new Color(0.85f, 0.1f, 0.2f));
+        // Every stage as big as the raw wooden box (largest side).
+        float boxSize = MaxSide(_raw);
+        Match(_carved, boxSize);
+        Match(_gift, boxSize);
+        Root.rotation = facing;
         if (carvedIndex >= 0 && a.CarvedMainColors != null && carvedIndex < a.CarvedMainColors.Length) _carvedMain = a.CarvedMainColors[carvedIndex];
         if (giftIndex >= 0 && a.PresentMainColors != null && giftIndex < a.PresentMainColors.Length) _giftMain = a.PresentMainColors[giftIndex];
 
@@ -61,7 +69,9 @@ public class ElfToy
         _carvedSource = Sources(_carvedRenderers);
         _giftSource = Sources(_giftRenderers);
         // Glow-capable copies of the raw block materials (the others are set by Refresh).
-        foreach (Renderer r in _raw.GetComponentsInChildren<Renderer>(true)) SetMaterials(r, r.sharedMaterials, null, null, null);
+        _rawRenderers = _raw.GetComponentsInChildren<Renderer>(true);
+        _rawOpaque = new Material[_rawRenderers.Length][];
+        for (int i = 0; i < _rawRenderers.Length; i++) { SetMaterials(_rawRenderers[i], _rawRenderers[i].sharedMaterials, null, null, null); _rawOpaque[i] = _rawRenderers[i].sharedMaterials; }
         _mark = ElfArt.Label(Root, new Vector3(0f, SIZE + 0.7f, -0.3f), "?", 9f, new Color(1f, 0.2f, 0.2f));
         List<Renderer> all = new List<Renderer>();
         foreach (Renderer r in Root.GetComponentsInChildren<Renderer>(true))
@@ -78,6 +88,19 @@ public class ElfToy
         else ElfArt.Prim(PrimitiveType.Cube, holder, new Vector3(0f, size * 0.5f, 0f), Vector3.one * size, fallback);
         foreach (Collider c in holder.GetComponentsInChildren<Collider>(true)) Object.Destroy(c);
         return holder.gameObject;
+    }
+
+    static float MaxSide(GameObject model)
+    {
+        Vector3 size = ElfArt.GetBounds(model).size;
+        return Mathf.Max(size.x, Mathf.Max(size.y, size.z));
+    }
+
+    /// <summary>Scales a model holder (pivot at its bottom centre) so its largest side is size.</summary>
+    static void Match(GameObject model, float size)
+    {
+        float current = MaxSide(model);
+        if (current > 0.001f && size > 0.001f) model.transform.localScale *= size / current;
     }
 
     static Material[][] Sources(Renderer[] renderers)
@@ -108,7 +131,42 @@ public class ElfToy
             if ((added & WRAP) != 0) _wrapColor = playerColor;
         }
         Refresh();
-        if (added != 0) ElfArt.Sparkle(Root.position + Vector3.up * SIZE * 0.6f, ElfArt.StepColors[ElfStation.FirstStep(added)]);
+        if (added != 0 && !Ghost) ElfArt.Sparkle(Root.position + Vector3.up * SIZE * 0.6f, ElfArt.StepColors[ElfStation.FirstStep(added)]);
+    }
+
+    /// <summary>Ghost toy (countdown): 75% transparent, transformed automatically by the machines it passes, not
+    /// playable; becomes a normal toy at the start.</summary>
+    public bool Ghost { get; private set; }
+
+    public void SetGhost(bool ghost)
+    {
+        if (Ghost == ghost) return;
+        Ghost = ghost;
+        Refresh();
+    }
+
+    static readonly Dictionary<Material, Material> GhostMaterials = new Dictionary<Material, Material>();
+
+    void ApplyGhostMaterials()
+    {
+        foreach (Renderer r in _all)
+        {
+            if (r == null) continue;
+            Material[] mats = r.sharedMaterials;
+            for (int m = 0; m < mats.Length; m++)
+            {
+                if (mats[m] == null) continue;
+                if (!GhostMaterials.TryGetValue(mats[m], out Material ghost) || ghost == null)
+                {
+                    GhostMaterials[mats[m]] = ghost = ElfArt.Transparent(mats[m]);
+                    Color c = mats[m].HasProperty(BaseColorId) ? mats[m].GetColor(BaseColorId) : Color.white;
+                    c.a *= 0.25f; // 75% transparent
+                    ghost.SetColor(BaseColorId, c);
+                }
+                mats[m] = ghost;
+            }
+            r.sharedMaterials = mats;
+        }
     }
 
     /// <summary>Lights the toy up like the jump buttons of the station that just transformed it (fades in 0.5 s).</summary>
@@ -221,6 +279,8 @@ public class ElfToy
             SetMaterials(_carvedRenderers[i], _carvedSource[i], painted ? null : wood, _carvedMain, painted ? _paintColor : null);
         for (int i = 0; i < _giftRenderers.Length; i++)
             SetMaterials(_giftRenderers[i], _giftSource[i], null, _giftMain, _wrapColor);
+        for (int i = 0; i < _rawRenderers.Length; i++) _rawRenderers[i].sharedMaterials = _rawOpaque[i];
+        if (Ghost) ApplyGhostMaterials();
         _mark.gameObject.SetActive(Unfinished);
         UpdateBlocks();
     }

@@ -193,11 +193,31 @@ public static class ElfArt
         GameObject fx = Object.Instantiate(Assets.SparklePrefab, position, Quaternion.identity);
         foreach (ParticleSystem ps in fx.GetComponentsInChildren<ParticleSystem>())
         {
+            // Bigger, faster, twice as many stars as the prefab.
             ParticleSystem.MainModule main = ps.main;
             main.startColor = new ParticleSystem.MinMaxGradient(Color.Lerp(color, Color.white, 0.6f), Color.Lerp(color, Gold, 0.3f));
+            main.startSizeMultiplier *= 1.7f;
+            main.startSpeedMultiplier *= 1.3f;
+            main.startLifetimeMultiplier *= 1.25f;
+            ParticleSystem.EmissionModule emission = ps.emission;
+            for (int b = 0; b < emission.burstCount; b++)
+            {
+                ParticleSystem.Burst burst = emission.GetBurst(b);
+                if (burst.count.constant > 1f) burst.count = burst.count.constant * 2.2f;
+                emission.SetBurst(b, burst);
+            }
             ps.Play();
         }
-        Object.Destroy(fx, 2f);
+        // Flash of light on the surroundings.
+        Light flash = new GameObject("Flash").AddComponent<Light>();
+        flash.transform.SetParent(fx.transform, false);
+        flash.type = LightType.Point;
+        flash.color = Color.Lerp(color, Color.white, 0.4f);
+        flash.range = 7f;
+        flash.intensity = 25f;
+        flash.shadows = LightShadows.None;
+        Object.Destroy(flash.gameObject, 0.15f);
+        Object.Destroy(fx, 2.5f);
     }
 
     #region Toy materials (glow + player color)

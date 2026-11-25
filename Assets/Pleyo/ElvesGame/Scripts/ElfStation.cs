@@ -29,6 +29,7 @@ public class ElfStation
     }
 
 
+    public Transform Root { get; private set; }
     public int Index;
     public int Steps;
     public float MachineX;
@@ -93,6 +94,7 @@ public class ElfStation
 
         Transform station = new GameObject($"Station{index}").transform;
         station.SetParent(root, false);
+        Root = station;
         Pose pose = ElfPath.At(machineX); // straight, ring or terraces
         station.SetPositionAndRotation(pose.position, pose.rotation);
         ElfAssets a = ElfArt.Assets;
@@ -121,9 +123,28 @@ public class ElfStation
                 claw.localPosition = new Vector3(0f, 0f, -CLAW_Z);
                 claw.localRotation = Quaternion.Euler(0f, 180f, 0f);
             }
+            // Ring / terraces: the claw stands behind the belt (tree side), its sleigh behind it, so the camera sees the
+            // belt; its players stand on their buttons on top of it (on the arm joint), like on the other machines.
+            bool behind = ElfPath.Current != ElfPath.Layout.Straight;
+            if (behind)
+            {
+                claw.localPosition = new Vector3(claw.localPosition.x, claw.localPosition.y, Mathf.Abs(claw.localPosition.z));
+                claw.localRotation = Quaternion.identity;
+            }
             _arm = claw.Find("Arm");
             _claw = _arm.Find("Claw");
             _cable = _claw.Find("Cable");
+            if (behind)
+            {
+                Transform joint = _arm.Find("Joint");
+                Transform column = claw.Find("Column");
+                Bounds jb = ElfArt.GetBounds(joint != null ? joint.gameObject : _arm.gameObject);
+                Vector3 axis = column != null ? column.position : claw.position;
+                Vector3 top = station.InverseTransformPoint(new Vector3(axis.x, jb.max.y, axis.z));
+                _onMachine = true;
+                _standY = top.y;
+                _standZ = top.z;
+            }
             _arm.localRotation = Quaternion.Euler(0f, CLAW_SLEIGH_YAW, 0f);
             Vector3 drop = _claw.position;
             _arm.localRotation = Quaternion.identity;
@@ -329,13 +350,24 @@ public class ElfStation
     }
 
     /// <summary>A toy this machine may process: on the belt, not passed yet, its step not already done (by the other
-    /// machine of the step). A player may take the other lane's toy (it counts for him); the automatic machine may not.</summary>
+    /// machine of the step). The other lane's toy (colored ring of the other player): only when that player is not
+    /// active (it then counts for this one); never for the automatic machine.</summary>
     bool CanTake(ElfToy toy, bool byBot)
     {
-        if (!toy.IsMoving || (toy.HandledStations & (1 << Index)) != 0) return false;
+        if (!toy.IsMoving || toy.Ghost || (toy.HandledStations & (1 << Index)) != 0) return false;
         int needed = Steps & ~ElfToy.LOAD;
         if (needed != 0 && (toy.Done & needed) == needed) return false;
-        return !byBot || Lane < 0 || toy.Kind == Lane;
+        if (Lane < 0 || toy.Kind == Lane) return true;
+        if (byBot || Team == null) return false;
+        foreach (ElfStation other in Team.Machines)
+            if (other != this && other.Lane == toy.Kind && other.HasActiveHuman()) return false;
+        return true;
+    }
+
+    /// <summary>Start of the play: the players who jumped during the tutorial get a fresh AFK delay.</summary>
+    public void ResetSeen(float time)
+    {
+        for (int i = 0; i < _lastSeen.Length; i++) _lastSeen[i] = time;
     }
 
     public void ShowMissed() { ShowSign(ElfLoc.Get("MISSED"), new Color(1f, 0.3f, 0.25f)); }
@@ -452,10 +484,17 @@ public class ElfStation
         }
     }
 
+    /// <summary>The gifts go to the central pile (ElfGame.ThrowToPile): no sleigh.</summary>
+    public void HideSleighs()
+    {
+        foreach (Transform s in _sleighs) s.gameObject.SetActive(false);
+    }
+
     void Drop()
     {
         ElfToy toy = _held;
         _held = null;
+        if (_game.ThrowToPile(toy)) return; // several screens: thrown onto the gift pile in the middle of the hall
         int k = _sleighFill++;
         toy.Park(_pile, new Vector3(((k % 4) - 1.5f) * 0.7f, (k / 8) * 0.55f, ((k / 4) % 2 - 0.5f) * 0.7f));
         _game.LoadToy(toy);

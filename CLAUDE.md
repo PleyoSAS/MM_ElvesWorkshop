@@ -15,8 +15,8 @@ Elves' Workshop: MM co-op, 1-8 players on 1-4 screens, 2 min (10 s tutorial + 3 
 line across all screens (one 3D scene, one camera per screen side by side): Carve, Paint, Wrap, Load the sleigh.
 A team = a step (Carve / Paint / Wrap / Load). Since 2026-11-24 each Carve / Paint / Wrap player has his own machine
 (ElfTeam.Machines; 2 players = lanes 0 / 1, each owning every other toy, shown by a colored ring under the toy only on that player's screen; a
-player may still process the other lane's toy, it counts for him); any landing fires his machine. The claw (Load) stays
-one machine for its team: all its active players must land within 0.5 s (any landing counts;
+player may process the other lane's toy only while its owner is inactive); any landing fires his machine. The claw (Load) too: one claw per player (2026-11-25).
+(older note: the claw was one synced machine: all its active players had to land within 0.5 s (any landing counts;
 no high-jump condition, decided with the user on 2026-11-24). A toy passing a station unprocessed is "unfinished" for
 good once it passed the last machine of its step. Score = finished gifts in the sleigh; unfinished gifts loaded = fun
 stat. Crown = team with most toys. More toys when steps have 2 machines (`ElfGame.SpawnFactor`). No robots: an absent
@@ -148,3 +148,27 @@ In `SplitScreenWithDynamicWidth Variant`:
 - `PostProcess` (Post Processing Stack v2 volume, layer 18 `PleyoPostProcessing`, profile `PleyoGlobalPostProcessing`)
   and the cameras' `PostProcessLayer` come from the template; the player cameras also render layer 18. PPv2 is not
   rendered by URP: change the look in the URP profile.
+
+## Flow (2026-11-25)
+- Tutorial (10 s, `ElfHud.BuildTutorial`): one card with the rules, the unfinished gift picture, a time gauge and one
+  chip per player of the screen, checked once the player jumped; a player who does not jump stays inactive until his
+  first jump (AFK delay reset at the end of the tutorial). Then the 3 s countdown.
+- End (`ElfGameEnd.cs`): big 3-2-1 over the last 3 s of play, "Time's up!" pause, fade to white, the line (machines,
+  claws, sleighs, boards, belt, spawner, bin, toys) is swapped for a podium of the teams at the centre of screen 1 seen
+  by every screen through screen 1's game camera, round gauge 8 s, iris close, quit. No template leaderboard.
+- Indoor light only: directional lights are switched off at runtime, flat ambient, low sky reflections.
+- Splash (3.5 s, before the tutorial): logo `ElfAssets.Logo` (empty: the title in big letters), each camera glides down
+  to its game view. Tutorial pictures rendered at start by `ElfIcons` (studio at y -1000: the screen's machine template
+  with an elf on its button, toy stages box > carved > painted > gift).
+- Ring / terraces: each camera aims at the middle of its screen's machines (not the screen centre). Decor cutting a
+  camera's view of its line is hidden for that camera only (`ElfOccluders`, forceRenderingOff per camera).
+- Toys: carved toys and gifts scaled so their largest side matches the raw box.
+- UI: one wood board per player on the belt front, in front of his machine (letter, his score); gifts / unfinished on a
+  white HUD card (top left, with the timer); team boards stay on the sleighs.
+- Ring / terraces (several screens): each claw stands behind the belt (tree side) with one sleigh behind it, its player
+  on his button on top of it (arm joint); no UI on the sleighs (team boards and counters only with 1 screen). The 1-screen
+  map keeps the claw on the camera side with the sleigh row and its boards.
+- Gift pile (`ElfGameLine.cs`, ring / terraces): the claws throw each gift in an arc onto `ElfGame._giftSocle` (scene:
+  `---- Workshop Ring ----/GiftSocle`, the user's cylinder), stacked in sunflower layers; no sleighs then.
+- Countdown: the belt is pre-filled with ghost toys (75% transparent copies of the materials), transformed on their
+  own by the machines they pass, not playable; at "Go!" they become normal toys, so every machine has toys at once.

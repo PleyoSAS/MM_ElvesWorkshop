@@ -58,7 +58,7 @@ public class ElfAvatar
             _capLight.transform.localPosition = new Vector3(0f, 0.6f, -0.4f);
             _capLight.type = LightType.Point;
             _capLight.color = color;
-            _capLight.range = 3.5f;
+            _capLight.range = 6f;
             _capLight.shadows = LightShadows.None;
             _capLight.enabled = false;
         }
@@ -174,6 +174,21 @@ public class ElfAvatar
         if (active && _anim != null && _anim.runtimeAnimatorController != null) _anim.CrossFadeInFixedTime(IdleHash, 0.2f);
     }
 
+    /// <summary>Shown at once in its idle pose, without the "Jump to play" pill (tutorial pictures).</summary>
+    public void ShowNow()
+    {
+        SetActive(true);
+        _alpha = 1f;
+        _body.gameObject.SetActive(true);
+        if (_sign != null) _sign.SetActive(false);
+        if (_badge != null) { _badge.SetActive(true); _badge.transform.localScale = Vector3.one; }
+        if (_anim != null && _anim.runtimeAnimatorController != null)
+        {
+            _anim.Play(IdleHash, 0, 0.3f);
+            _anim.Update(0f);
+        }
+    }
+
     /// <summary>Lights the jump button up (the station machine just transformed a toy).</summary>
     public void Glow() { if (_active) _glow = 1f; }
 
@@ -257,28 +272,32 @@ public class ElfAvatar
 
     void TickMotion(float deltaTime, float time)
     {
-        float y = 0f;
+        float y = 0f, stretch = 0f;
         if (_airTime >= 0f)
         {
             _airTime += deltaTime;
             float t = Mathf.Clamp01(_airTime / _airDuration);
             y = 4f * JUMP_HEIGHT * t * (1f - t);
+            // Stretched along the jump: most at takeoff and before landing (fast), round at the top.
+            stretch = Mathf.Abs(1f - 2f * t) * 0.22f;
             if (_airTime > _airDuration * 1.6f)
                 _airTime = -1f; // landing never came: stop floating
         }
-        _squash = Mathf.MoveTowards(_squash, 0f, deltaTime * 5f);
+        _squash = Mathf.MoveTowards(_squash, 0f, deltaTime * 3.5f);
         _press = Mathf.MoveTowards(_press, 0f, deltaTime * 4f);
         _body.localPosition = new Vector3(0f, y - _press * 0.12f, 0f);
-        float sq = IsRobot ? _squash * 0.2f : _squash * 0.08f;
-        _body.localScale = new Vector3(1f + sq, 1f - sq, 1f + sq);
+        // Squashed at the landing, then a springy rebound.
+        float sq = (IsRobot ? 0.2f : 0.3f) * _squash * Mathf.Cos((1f - _squash) * Mathf.PI * 2.5f);
+        float wide = 1f + sq * 0.6f - stretch * 0.45f;
+        _body.localScale = new Vector3(wide, 1f - sq + stretch, wide);
         if (_cap != null && _active) _cap.localPosition = new Vector3(0f, 0.06f - _press * 0.14f, 0f); // the shown avatar drives the shared button
         if (_badge != null) _badge.transform.localPosition = new Vector3(0f, _badgeY + y, -0.3f); // follows the jump
         if (_capMaterial != null && (_glow > 0f || _capLight.enabled))
         {
-            _glow = Mathf.MoveTowards(_glow, 0f, deltaTime * 2f);
-            _capMaterial.SetColor(EmissionId, _color * (_glow * 3f));
+            _glow = Mathf.MoveTowards(_glow, 0f, deltaTime * 1.4f);
+            _capMaterial.SetColor(EmissionId, _color * (_glow * 10f));
             _capLight.enabled = _glow > 0f;
-            _capLight.intensity = _glow * 8f;
+            _capLight.intensity = _glow * 30f;
         }
         if (_sign != null && _sign.activeSelf)
             _sign.transform.localPosition = new Vector3(0f, _height + 1.65f + Mathf.Sin(time * 3f) * 0.12f, -0.3f);

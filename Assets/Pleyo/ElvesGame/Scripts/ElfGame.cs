@@ -20,16 +20,16 @@ using UnityEngine.Rendering.Universal;
 /// Difficulty: toy spacing in beats of the trampoline BPM (config), slowed when the players bounce slower (longer beats).
 /// Displays: real displays in a build with enough monitors, else tiled on the main display (Editor).
 /// </summary>
-public class ElfGame : MonoBehaviour
+public partial class ElfGame : MonoBehaviour
 {
     #region Variables
     public static ElfGame Instance { get; private set; }
 
     [SerializeField] ElfAssets _assets;
+    [SerializeField] float _splashSeconds = 3.5f;
     [SerializeField] float _tutorialSeconds = 10f;
     [SerializeField] float _countdownSeconds = 3f;
     [SerializeField] float _playSeconds = 120f;
-    [SerializeField] float _resultsSeconds = 10f;
     [SerializeField] float _beltSpeed = 2.4f;
     [SerializeField] bool _forceTiledDisplays;
     [Tooltip("Editor: screen k renders to Display k + 1 (open one Game view per display) instead of tiles in one Game view.")]
@@ -37,7 +37,7 @@ public class ElfGame : MonoBehaviour
     [Tooltip("Map used with 2-4 screens (1 screen: the straight workshop).")]
     [SerializeField] ElfPath.Layout _multiLayout = ElfPath.Layout.Ring;
     [Tooltip("Ring map camera: height, z (from the belt, negative = outside the ring), pitch.")]
-    [SerializeField] Vector3 _ringCamera = new Vector3(14.26f, -19.84f, 22f);
+    [SerializeField] Vector3 _ringCamera = new Vector3(7.01f, -19.62f, 7f);
     [Tooltip("Terraces map camera (each row): height, z, pitch; it stands between its row and the previous one (z > -TERRACE_DEPTH).")]
     [SerializeField] Vector3 _terraceCamera = new Vector3(12f, -15f, 22f);
     [SerializeField] bool _logJumps;
@@ -70,6 +70,8 @@ public class ElfGame : MonoBehaviour
     readonly List<ElfToy> _toys = new List<ElfToy>();
     readonly List<ElfToy> _binned = new List<ElfToy>();
     readonly List<Camera> _cameras = new List<Camera>();
+    readonly List<Pose> _cameraPoses = new List<Pose>(); // game pose of each camera (the splash moves in to it)
+    readonly List<float> _viewS = new List<float>(); // path distance each camera aims at
     readonly List<ElfHud> _huds = new List<ElfHud>();
     readonly Dictionary<int, KeyValuePair<ElfStation, int>> _byTrampoline = new Dictionary<int, KeyValuePair<ElfStation, int>>();
     readonly Dictionary<int, float> _lastLand = new Dictionary<int, float>();
@@ -80,11 +82,15 @@ public class ElfGame : MonoBehaviour
     Transform _world, _sceneMachines;
     ElfWorkshop _workshop;
     Material _beltMaterial;
-    TMPro.TextMeshPro _sleighLabel;
+    readonly List<TMPro.TextMeshPro> _sleighLabels = new List<TMPro.TextMeshPro>(); // one counter per claw
     float _sleighPunch;
+    Transform _boardsRoot, _bin;
+    bool _tutorialDone;
+    readonly ElfOccluders _occluders = new ElfOccluders();
+    readonly List<Renderer> _decor = new List<Renderer>();
     float _beltY = 1.2f, _spawnX = 1.5f, _beltFrontZ = -1f;
     readonly ElfBoards _boards = new ElfBoards();
-    float _endX, _playTimer, _spawnTimer, _resultsTimer;
+    float _endX, _playTimer, _spawnTimer;
     int _spawned;
     bool _ownGameOver, _quitRequested, _celebrated;
     readonly StringBuilder _sb = new StringBuilder();
@@ -121,8 +127,11 @@ public class ElfGame : MonoBehaviour
         BuildStations();
         // Sleigh row of the claw in front of the belt: one sleigh per score board, the boards hang on them.
         ElfStation loader = _stations.Find(st => st.IsLoader);
-        if (loader != null) loader.BuildSleighRow(_teams.Count);
-        _boards.Build(_world, _teams.Count, loader, _screens.Count, _screenWidth, _endX, _beltY - 0.05f, _beltFrontZ - 0.03f);
+        if (loader != null) loader.BuildSleighRow(_screens.Count == 1 ? _teams.Count : 1); // several screens: one sleigh per claw
+        SetupGiftPile();
+        _boardsRoot = new GameObject("Boards").transform;
+        _boardsRoot.SetParent(_world, false);
+        _boards.Build(_boardsRoot, _teams.Count, _screens.Count == 1 ? loader : null, _stations, GetPlayerColor, GetPlayerLetter, _beltY - 0.05f, _beltFrontZ - 0.03f);
         BuildViews();
         ElfInput.OnPlayerJump += OnPlayerJump;
         ElfInput.OnPlayerLand += OnPlayerLand;
@@ -133,6 +142,7 @@ public class ElfGame : MonoBehaviour
     {
         ElfInput.OnPlayerJump -= OnPlayerJump;
         ElfInput.OnPlayerLand -= OnPlayerLand;
+        _occluders.Dispose();
         if (Instance == this) Instance = null;
     }
 
@@ -146,20 +156,13 @@ public class ElfGame : MonoBehaviour
 
         EGameState state = GetGameState();
         bool gameOver = state == EGameState.GAME_OVER || _ownGameOver;
-        bool playing = false, big = false;
+        bool playing = false, big = false, tutorial = false;
         string message = null, timer = "";
-        float introSeconds = _tutorialSeconds + _countdownSeconds;
+        float introSeconds = _splashSeconds + _tutorialSeconds + _countdownSeconds, splash = -1f;
 
         if (gameOver)
         {
-            _resultsTimer += dt;
-            message = GetResultsText();
-            if (!_celebrated)
-            {
-                _celebrated = true;
-                for (int i = 0; i < _stations.Count; i++) _stations[i].Celebrate();
-            }
-            if (_resultsTimer >= _resultsSeconds) QuitGame();
+            UpdateEnding(dt, out message, out big); // time's up, fade to white, podium, iris (ElfGameEnd.cs)
         }
         else if (state == EGameState.GAME_LOADING)
         {
@@ -168,22 +171,40 @@ public class ElfGame : MonoBehaviour
         else
         {
             _playTimer += dt;
-            if (_playTimer < _tutorialSeconds)
+            // Splash: the logo over the scene, each camera gliding down from above (never backward: walls) to its view.
+            splash = _playTimer < _splashSeconds ? _playTimer / _splashSeconds : -1f;
+            for (int i = 0; i < _cameras.Count && i < _cameraPoses.Count; i++)
             {
-                int page = Mathf.Min(2, (int)(_playTimer / (_tutorialSeconds / 3f)));
-                message = $"<size=125%><color=#B45309>{ElfLoc.Get("TITLE")}</color></size>\n{ElfLoc.Get("TUTO_" + (page + 1))}";
+                Pose game = _cameraPoses[i];
+                float k = splash >= 0f ? 1f - Mathf.SmoothStep(0f, 1f, splash) : 0f;
+                _cameras[i].transform.SetPositionAndRotation(game.position + game.rotation * new Vector3(0f, 6f, 2f) * k, game.rotation * Quaternion.Euler(28f * k, 0f, 0f));
             }
+            // Tutorial: one card (rules, unfinished gift, time gauge, jump check of the screen's players). A player
+            // who does not jump during it stays inactive until his first jump.
+            if (splash >= 0f) { }
+            else if (_playTimer < _splashSeconds + _tutorialSeconds) tutorial = true;
+            else if (!_tutorialDone)
+            {
+                _tutorialDone = true;
+                for (int i = 0; i < _stations.Count; i++) _stations[i].ResetSeen(time);
+            }
+            if (tutorial || splash >= 0f) { }
             else if (_playTimer < introSeconds)
             {
                 message = Mathf.CeilToInt(introSeconds - _playTimer).ToString();
+                // The line already runs: ghost toys, transformed on their own, playable at "Go!".
+                if (!_prefilled) Prefill();
+                UpdateSpawn(dt, 0f);
                 big = true;
             }
             else
             {
                 playing = true;
+                if (!_lineLive) GoLive();
                 float elapsed = _playTimer - introSeconds;
                 float remaining = Mathf.Max(0f, _playSeconds - elapsed);
                 if (elapsed < 1.2f) { message = ElfLoc.Get("GO"); big = true; }
+                else if (remaining > 0f && remaining <= 3f) { message = Mathf.CeilToInt(remaining).ToString(); big = true; } // last 3 s
                 timer = $"{(int)remaining / 60}:{(int)remaining % 60:00}";
                 UpdateSpawn(dt, elapsed);
                 if (remaining <= 0f && PleyoGameManagerTemplate.Instance == null) _ownGameOver = true;
@@ -192,31 +213,36 @@ public class ElfGame : MonoBehaviour
 
         WindowX = Mathf.Max(WINDOW_SECONDS_MIN, 0.6f * GetEffectivePeriod()) * _beltSpeed;
         UpdateToys(dt);
+        TickFlights(dt);
         ElfToy.TickGlows(dt);
         if (_beltMaterial != null && _workshop != null)
             _beltMaterial.mainTextureOffset += _workshop.BeltScroll * (_beltSpeed * dt);
         for (int i = 0; i < _stations.Count; i++)
             _stations[i].Tick(dt, time, playing, _toys);
         UpdateCrowns();
-        if (_sleighLabel != null)
-        {
-            // Sleigh counter pops at each loaded gift.
-            _sleighPunch = Mathf.MoveTowards(_sleighPunch, 0f, dt * 2.5f);
-            float pop = 1f + Mathf.Sin(_sleighPunch * Mathf.PI) * 0.6f * _sleighPunch;
-            _sleighLabel.transform.localScale = Vector3.one * pop;
-        }
+        // Sleigh counters pop at each loaded gift.
+        _sleighPunch = Mathf.MoveTowards(_sleighPunch, 0f, dt * 2.5f);
+        float pop = 1f + Mathf.Sin(_sleighPunch * Mathf.PI) * 0.6f * _sleighPunch;
+        foreach (TMPro.TextMeshPro label in _sleighLabels) label.transform.localScale = Vector3.one * pop;
 
         UpdateScores();
         for (int i = 0; i < _huds.Count; i++)
         {
             _huds[i].SetTimer(timer);
             _huds[i].SetMessage(message, big);
+            List<int> players = _screens[Mathf.Min(i, _screens.Count - 1)].Value;
+            bool[] jumped = new bool[players.Count];
+            for (int p = 0; p < players.Count; p++)
+                jumped[p] = _byTrampoline.TryGetValue(players[p], out KeyValuePair<ElfStation, int> slot) && slot.Key.IsMemberActive(slot.Value);
+            _huds[i].SetTutorial(tutorial, 1f - (_playTimer - _splashSeconds) / _tutorialSeconds, jumped);
+            _huds[i].SetSplash(splash);
+            _huds[i].ShowStats(playing || _podiumBuilt); // gifts card: during the play and on the podium
         }
     }
     #endregion
 
     #region Public Methods
-    public float GetTotalGameDuration() { return _tutorialSeconds + _countdownSeconds + _playSeconds; }
+    public float GetTotalGameDuration() { return _splashSeconds + _tutorialSeconds + _countdownSeconds + _playSeconds; }
 
     /// <summary>Called by the claw when it drops a toy in the sleigh.</summary>
     public void LoadToy(ElfToy toy)
@@ -224,7 +250,7 @@ public class ElfGame : MonoBehaviour
         bool finished = !toy.Unfinished && (toy.Done & (ElfToy.CARVE | ElfToy.PAINT | ElfToy.WRAP)) == (ElfToy.CARVE | ElfToy.PAINT | ElfToy.WRAP);
         if (finished) Gifts++;
         else UnfinishedLoaded++;
-        if (_sleighLabel != null) _sleighLabel.text = Gifts.ToString();
+        foreach (TMPro.TextMeshPro label in _sleighLabels) label.text = Gifts.ToString();
         _sleighPunch = 1f;
     }
 
@@ -274,6 +300,12 @@ public class ElfGame : MonoBehaviour
         if (state == EGameState.GAME_LOADING && MMGameManager.Instance != null && (_touchMode || _inputMethod <= 1 || Application.isEditor))
             MMGameManager.Instance.PlayerReady(PleyoMMSensors.TrampolineId_to_PlayerId(trampolineId));
         _lastJump[trampolineId] = Time.time;
+        // Tutorial feedback: the player's tile bounces.
+        for (int s = 0; s < _screens.Count && s < _huds.Count; s++)
+        {
+            int tile = _screens[s].Value.IndexOf(trampolineId);
+            if (tile >= 0) _huds[s].PulseTile(tile);
+        }
         slot.Key.OnJump(slot.Value, Time.time, _airSeconds);
     }
 
@@ -359,6 +391,7 @@ public class ElfGame : MonoBehaviour
         _spawnTimer = beats[Random.Range(0, beats.Length)] * GetEffectivePeriod() * SpawnFactor();
         ElfToy toy = new ElfToy();
         toy.Init(_world, _spawnX, _beltY, _spawned++ % 2);
+        toy.SetGhost(!_lineLive);
         _toys.Add(toy);
         RefreshOwner(toy);
     }
@@ -387,7 +420,8 @@ public class ElfGame : MonoBehaviour
         foreach (ElfTeam team in _teams)
         {
             int needed = team.Steps & ~ElfToy.LOAD;
-            if (needed == 0 || (toy.Done & needed) == needed || toy.X > team.LastMachineX + WindowX) continue;
+            // Load team: the next step of every toy still on the belt once the others are done.
+            if ((needed != 0 && (toy.Done & needed) == needed) || toy.X > team.LastMachineX + WindowX) continue;
             if (team.Machines.Count > 1)
                 foreach (ElfStation machine in team.Machines)
                     // Only on the owner's screen: players don't see the colors of the other screens' players.
@@ -427,6 +461,7 @@ public class ElfGame : MonoBehaviour
                 toy.HandledStations |= bit;
                 int needed = station.Steps & ~ElfToy.LOAD;
                 if (needed == 0) continue;
+                if (toy.Ghost) { toy.Apply(needed, station.Members.Count == 1 ? GetPlayerColor(station.Members[0]) : (Color?)null); continue; } // countdown: automatic
                 if (station.MachineX >= station.Team.LastMachineX && (toy.Done & needed) != needed)
                 {
                     toy.MarkUnfinished();
@@ -485,31 +520,9 @@ public class ElfGame : MonoBehaviour
             _sb.Append("\n<size=150%>").Append(team.Processed).Append("</size>");
             _teamTexts[i] = _sb.ToString();
         }
-        string gifts = $"{ElfLoc.Get("GIFTS")}\n<size=190%>{Gifts}</size>";
-        string unfinished = $"<size=80%>{ElfLoc.Get("UNFINISHED")}</size>\n<size=190%>{UnfinishedLoaded}</size>";
-        _boards.Set(gifts, unfinished, _teamTexts, best);
-    }
-
-    string GetResultsText()
-    {
-        ElfTeam bestTeam = null;
-        foreach (ElfTeam team in _teams)
-            if (team.HasPlayers && (bestTeam == null || team.Processed > bestTeam.Processed)) bestTeam = team;
-        _sb.Clear();
-        _sb.Append("<size=120%><color=#B45309>").Append(ElfLoc.Get("RESULTS")).Append("</color></size>\n");
-        _sb.Append(ElfLoc.Get("GIFTS")).Append(" : <color=#B45309>").Append(Gifts).Append("</color>\n");
-        _sb.Append("<size=70%><color=#475569>").Append(ElfLoc.Get("UNFINISHED")).Append(" : ").Append(UnfinishedLoaded);
-        if (UnfinishedLoaded > 0) _sb.Append("  (").Append(ElfLoc.Get("FUN")).Append(')');
-        _sb.Append("</color></size>\n");
-        if (bestTeam != null && bestTeam.Processed > 0)
-        {
-            _sb.Append("<size=80%>").Append(ElfLoc.Get("BEST_TEAM")).Append(" : ");
-            foreach (ElfStation station in bestTeam.Machines)
-                for (int m = 0; m < station.Members.Count; m++)
-                    _sb.Append("<color=#").Append(ColorUtility.ToHtmlStringRGB(GetPlayerColor(station.Members[m]) * 0.85f)).Append('>').Append(GetPlayerLetter(station.Members[m])).Append("</color> ");
-            _sb.Append("(").Append(bestTeam.Name).Append(")</size>");
-        }
-        return _sb.ToString();
+        _boards.Set(_teamTexts, best);
+        _boards.SetPlayers();
+        for (int i = 0; i < _huds.Count; i++) _huds[i].SetStats(Gifts, UnfinishedLoaded);
     }
 
     EGameState GetGameState()
@@ -583,17 +596,16 @@ public class ElfGame : MonoBehaviour
 
         for (int s = 0; s < count; s++)
         {
-            // One team per slot. A team of the Carve / Paint / Wrap steps gets one machine per player (lane 0, 1:
-            // each owns every other toy); the claw (Load) stays one machine for its whole team (synchronized).
+            // One team per slot; each player of a team gets his own machine (Carve / Paint / Wrap machine or claw;
+            // lane 0, 1: each owns every other toy).
             List<KeyValuePair<int, List<int>>> slots = layout[s];
             List<KeyValuePair<ElfTeam, List<int>>> machines = new List<KeyValuePair<ElfTeam, List<int>>>();
             for (int i = 0; i < slots.Count; i++)
             {
                 ElfTeam team = new ElfTeam { Steps = slots[i].Key };
                 _teams.Add(team);
-                bool loader = (team.Steps & L) != 0;
                 List<int> members = slots[i].Value;
-                if (loader || members.Count <= 1) machines.Add(new KeyValuePair<ElfTeam, List<int>>(team, members));
+                if (members.Count <= 1) machines.Add(new KeyValuePair<ElfTeam, List<int>>(team, members));
                 else foreach (int member in members) machines.Add(new KeyValuePair<ElfTeam, List<int>>(team, new List<int> { member }));
             }
 
@@ -642,7 +654,11 @@ public class ElfGame : MonoBehaviour
                 station.Build(this, _stations.Count, team.Steps, members, x, _world, _beltY, offsets, TakeSceneStation(team.Steps));
                 for (int m = 0; m < station.Members.Count; m++)
                     _byTrampoline[station.Members[m]] = new KeyValuePair<ElfStation, int>(station, m);
-                if (station.Sleigh != null) station.CounterLabel = _sleighLabel = ElfArt.Label(station.Sleigh.Find("Counter") ?? station.Sleigh, Vector3.zero, "0", 12f, ElfArt.Gold);
+                if (station.Sleigh != null && _screens.Count == 1) // several screens: no UI on the sleighs
+                {
+                    station.CounterLabel = ElfArt.Label(station.Sleigh.Find("Counter") ?? station.Sleigh, Vector3.zero, "0", 12f, ElfArt.Gold);
+                    _sleighLabels.Add(station.CounterLabel);
+                }
                 team.Machines.Add(station);
                 _stations.Add(station);
             }
@@ -748,14 +764,39 @@ public class ElfGame : MonoBehaviour
         _sceneMachines = machines != null ? machines.transform : null;
         Transform sceneBin = _sceneMachines != null ? _sceneMachines.Find("Bin") : null;
         if (sceneBin != null)
+        {
+            _bin = sceneBin;
             PlaceOnPath(sceneBin, _endX + 1.15f, new Vector3(0f, sceneBin.position.y, sceneBin.position.z));
+        }
         else if (_assets != null && _assets.BinPrefab != null)
         {
-            Transform bin = Instantiate(_assets.BinPrefab, _world, false).transform;
-            PlaceOnPath(bin, _endX + 1.15f, Vector3.zero);
+            _bin = Instantiate(_assets.BinPrefab, _world, false).transform;
+            PlaceOnPath(_bin, _endX + 1.15f, Vector3.zero);
         }
+        // Indoor light only: the sun (directional lights) and the sky reflections would light the room from outside.
+        // Decor that may block a camera (ElfOccluders): everything of the map but its floor and belt.
+        if (_workshop != null)
+        {
+            Transform floor = _workshop.transform.Find("Floor");
+            foreach (Renderer r in _workshop.GetComponentsInChildren<Renderer>(true))
+            {
+                Transform t = r.transform;
+                if ((_workshop.Belt != null && t.IsChildOf(_workshop.Belt)) || (floor != null && t.IsChildOf(floor)) || (_bin != null && t.IsChildOf(_bin)) || IsSpawner(t)) continue;
+                _decor.Add(r);
+            }
+        }
+        foreach (Light light in FindObjectsByType<Light>(FindObjectsSortMode.None))
+            if (light.type == LightType.Directional) light.enabled = false;
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.62f, 0.55f, 0.52f);
+        RenderSettings.ambientLight = new Color(0.74f, 0.66f, 0.62f);
+        RenderSettings.reflectionIntensity = 0.35f;
+    }
+
+    /// <summary>Part of the toy spawner machine (on the line: never hidden as decor).</summary>
+    static bool IsSpawner(Transform t)
+    {
+        for (; t != null; t = t.parent) if (t.name.StartsWith("Spawner")) return true;
+        return false;
     }
 
     static void PlaceOnPath(Transform t, float s, Vector3 local)
@@ -798,6 +839,7 @@ public class ElfGame : MonoBehaviour
         int count = _screens.Count;
         int columns = count <= 1 ? 1 : 2;
         int rows = count <= 2 ? 1 : 2;
+        Sprite[] stepIcons = ElfIcons.ToySteps();
         for (int s = 0; s < count; s++)
         {
             int displayId = Application.isEditor ? s : _screens[s].Key;
@@ -822,11 +864,22 @@ public class ElfGame : MonoBehaviour
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.2f, 0.08f, 0.07f);
             float cx = s * _screenWidth + _screenWidth * 0.5f;
-            // Same framing on every layout, in the belt frame at the screen centre (ring: outside looking in; terraces: in
-            // front of and above its row).
+            // Ring / terraces: each camera aims at the middle of its own machines (they are packed after the spawner on
+            // screen 1 and before the bin on the last one, so the screen centre is off). Straight: screens side by side.
+            if (ElfPath.Current != ElfPath.Layout.Straight)
+            {
+                float min = float.MaxValue, max = float.MinValue;
+                foreach (ElfStation station in _stations)
+                    if (ScreenOf(station.MachineX) == s) { min = Mathf.Min(min, station.MachineX); max = Mathf.Max(max, station.MachineX); }
+                if (min <= max) cx = (min + max) * 0.5f;
+            }
+            // Same framing on every layout, in the belt frame (ring: outside looking in; terraces: in front of and above
+            // its row).
             Pose view = ElfPath.At(cx);
             Vector3 cameraSet = ElfPath.Current == ElfPath.Layout.Ring ? _ringCamera : ElfPath.Current == ElfPath.Layout.Terraces ? _terraceCamera : new Vector3(_cameraHeight, _cameraZ, _cameraPitch);
             camObject.transform.SetPositionAndRotation(view.position + view.rotation * new Vector3(0f, cameraSet.x, cameraSet.y), view.rotation * Quaternion.Euler(cameraSet.z, 0f, 0f));
+            _cameraPoses.Add(new Pose(camObject.transform.position, camObject.transform.rotation));
+            _viewS.Add(cx);
             UniversalAdditionalCameraData urp = camObject.AddComponent<UniversalAdditionalCameraData>();
             urp.antialiasing = AntialiasingMode.FastApproximateAntialiasing;
             urp.renderPostProcessing = true;
@@ -836,6 +889,25 @@ public class ElfGame : MonoBehaviour
             hudObject.transform.SetParent(camObject.transform, false);
             ElfHud hud = hudObject.AddComponent<ElfHud>();
             hud.Build(cam, QuitGame);
+            List<int> screenPlayers = _screens[s].Value;
+            string[] letters = new string[screenPlayers.Count];
+            Color[] colors = new Color[screenPlayers.Count];
+            for (int p = 0; p < screenPlayers.Count; p++) { letters[p] = GetPlayerLetter(screenPlayers[p]); colors[p] = GetPlayerColor(screenPlayers[p]); }
+            // Tutorial pictures: this screen's machine (Carve for the claw screen) with its first player on it.
+            string templateName = "Carve";
+            foreach (ElfStation station in _stations)
+                if (ScreenOf(station.MachineX) == s && !station.IsLoader) { templateName = SCENE_STATIONS[ElfStation.FirstStep(station.Steps)]; break; }
+            Transform template = _sceneMachines != null ? _sceneMachines.Find(templateName) : null;
+            Sprite machineIcon = ElfIcons.Machine(template, _beltY, colors.Length > 0 ? colors[0] : Color.red, letters.Length > 0 ? letters[0] : "A");
+            hud.BuildTutorial(letters, colors, machineIcon, stepIcons);
+            // Decor between this camera and its part of the line is hidden for it only.
+            List<Vector3> targets = new List<Vector3>();
+            for (float ts = s * _screenWidth + 1f; ts < Mathf.Min((s + 1) * _screenWidth, _endX + 1f); ts += 2f)
+            {
+                foreach (float h in new[] { 0.3f, 4f, 8f }) targets.Add(ElfPath.Point(ts, new Vector3(0f, _beltY + h, 0f)));
+                targets.Add(ElfPath.Point(ts, new Vector3(0f, 1f, -2.5f))); // sleighs, boards
+            }
+            _occluders.Build(cam, _decor, targets);
             _huds.Add(hud);
         }
     }
