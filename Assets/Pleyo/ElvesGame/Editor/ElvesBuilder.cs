@@ -655,6 +655,7 @@ public static class ElvesBuilder
 
     static string BuildCurvedMap(ElfPath.Layout layout)
     {
+        ElfPath.Origin = Pose.identity; // built around the world origin (the game then follows the Belt object)
         bool ring = layout == ElfPath.Layout.Ring;
         string rootName = ring ? "---- Workshop Ring ----" : "---- Workshop Terraces ----";
         // Also finds the inactive root (ElfGame shows the maps at runtime only): no duplicates.

@@ -21,13 +21,23 @@ public static class ElfPath
     public const float TERRACE_RISE = 6f, TERRACE_DEPTH = 16f; // deep enough for the camera of a row to stand in front of it, behind the previous row
 
     public static Layout Current = Layout.Straight;
+    /// <summary>Ring / terraces: where the path is in the world (ElfGame sets the map's Belt object pose, so moving the
+    /// Belt in the scene moves the gameplay with it). Straight: ignored.</summary>
+    public static Pose Origin = Pose.identity;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatics() { Current = Layout.Straight; }
+    static void ResetStatics() { Current = Layout.Straight; Origin = Pose.identity; }
 
     public static Pose At(float s) { return At(s, Current); }
 
     public static Pose At(float s, Layout layout)
+    {
+        Pose local = Local(s, layout);
+        if (layout == Layout.Straight) return local;
+        return new Pose(Origin.position + Origin.rotation * local.position, Origin.rotation * local.rotation);
+    }
+
+    static Pose Local(float s, Layout layout)
     {
         switch (layout)
         {

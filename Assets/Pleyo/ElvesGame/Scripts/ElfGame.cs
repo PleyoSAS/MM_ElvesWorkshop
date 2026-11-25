@@ -32,10 +32,12 @@ public class ElfGame : MonoBehaviour
     [SerializeField] float _resultsSeconds = 10f;
     [SerializeField] float _beltSpeed = 2.4f;
     [SerializeField] bool _forceTiledDisplays;
+    [Tooltip("Editor: screen k renders to Display k + 1 (open one Game view per display) instead of tiles in one Game view.")]
+    [SerializeField] bool _editorDisplayPerScreen = true;
     [Tooltip("Map used with 2-4 screens (1 screen: the straight workshop).")]
     [SerializeField] ElfPath.Layout _multiLayout = ElfPath.Layout.Ring;
     [Tooltip("Ring map camera: height, z (from the belt, negative = outside the ring), pitch.")]
-    [SerializeField] Vector3 _ringCamera = new Vector3(9f, -16f, 22f);
+    [SerializeField] Vector3 _ringCamera = new Vector3(14.26f, -19.84f, 22f);
     [Tooltip("Terraces map camera (each row): height, z, pitch; it stands between its row and the previous one (z > -TERRACE_DEPTH).")]
     [SerializeField] Vector3 _terraceCamera = new Vector3(12f, -15f, 22f);
     [SerializeField] bool _logJumps;
@@ -693,6 +695,9 @@ public class ElfGame : MonoBehaviour
             if (w.Layout == layout || (_workshop == null && w.Layout == ElfPath.Layout.Straight)) _workshop = w;
         if (_workshop != null && _workshop.Layout != layout) layout = ElfPath.Layout.Straight; // map missing: straight
         ElfPath.Current = layout;
+        // Ring / terraces: the path follows the map's Belt object (moved or turned in the scene with its tiles).
+        ElfPath.Origin = layout != ElfPath.Layout.Straight && _workshop != null && _workshop.Belt != null
+            ? new Pose(_workshop.Belt.position, Quaternion.Euler(0f, _workshop.Belt.eulerAngles.y, 0f)) : Pose.identity;
         foreach (ElfWorkshop w in FindObjectsByType<ElfWorkshop>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             w.gameObject.SetActive(w == _workshop);
         // Lights and snow of the straight map belong to it.
@@ -771,7 +776,8 @@ public class ElfGame : MonoBehaviour
 
     bool UseRealDisplays()
     {
-        if (_forceTiledDisplays || Application.isEditor) return false;
+        if (Application.isEditor) return _editorDisplayPerScreen;
+        if (_forceTiledDisplays) return false;
         int maxDisplay = 0;
         for (int i = 0; i < _screens.Count; i++) maxDisplay = Mathf.Max(maxDisplay, _screens[i].Key);
         return maxDisplay > 0 && Display.displays.Length > maxDisplay;
@@ -794,7 +800,7 @@ public class ElfGame : MonoBehaviour
         int rows = count <= 2 ? 1 : 2;
         for (int s = 0; s < count; s++)
         {
-            int displayId = _screens[s].Key;
+            int displayId = Application.isEditor ? s : _screens[s].Key;
             if (real && displayId > 0 && displayId < Display.displays.Length && !Display.displays[displayId].active)
                 Display.displays[displayId].Activate();
 

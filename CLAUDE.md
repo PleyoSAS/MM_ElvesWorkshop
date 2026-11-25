@@ -27,7 +27,8 @@ player's machine runs on its own (own lane only), only his "Jump to play" pill s
   (`---- Workshop ----`); 2-4 screens = `ElfGame._multiLayout`: Ring (`---- Workshop Ring ----`, round hall around a big
   tree, cameras outside looking in: `_ringCamera`) or Terraces (`---- Workshop Terraces ----`, one row per screen, 6 m
   higher and 16 m deeper each, ramps between rows, each camera between its row and the previous one:
-  `_terraceCamera`). Menus `Elves Workshop/Build Ring Map / Build Terraces Map In Open Scene` rebuild them (edits
+  `_terraceCamera`). The curved path follows the map's `Belt` object (position + yaw, `ElfPath.Origin`): move the Belt
+  with its tiles to move the gameplay and cameras. Menus `Elves Workshop/Build Ring Map / Build Terraces Map In Open Scene` rebuild them (edits
   lost; tile distances in `ElfWorkshop.TileS`). The curved maps are inactive in the editor; ElfGame shows the right
   root. Sleighs ignore the straight map's sleigh height on the curved maps (flat floor).
 - Station layout per screen count: see the `ElfGame` class summary. A station with no active player is run by a bot
