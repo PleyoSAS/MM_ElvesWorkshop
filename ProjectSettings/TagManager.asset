@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!78 &1
+TagManager:
+  serializedVersion: 3
+  tags:
+  - MenuButton
+  - MenuButton_Foot
+  - Left
+  - Right
+  layers:
+  - Default
+  - TransparentFX
+  - Ignore Raycast
+  - 
+  - Water
+  - UI
+  - PlayerId0 CameraP01 Trampold0
+  - PlayerId1 CameraP02 Trampold6
+  - PlayerId2 CameraP03 Trampold1
+  - PlayerId3 CameraP04 Trampold7
+  - PlayerId4 CameraP05 Trampold2
+  - PlayerId5 CameraP06 Trampold8
+  - PlayerId6 CameraP07 Trampold3
+  - PlayerId7 CameraP08 Trampold9
+  - PlayerId8 CameraP09 Trampold4
+  - PlayerId9 CameraP10 Trampold10
+  - PlayerId10 CameraP11 Trampold5
+  - PlayerId11 CameraP12 Trampold11
+  - PleyoPostProcessing
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  m_SortingLayers:
+  - name: Default
+    uniqueID: 0
+    locked: 0
+  m_RenderingLayers:
+  - Default
+  - Light Layer 1
+  - Light Layer 2
+  - Light Layer 3
+  - Light Layer 4
+  - Light Layer 5
+  - Light Layer 6
+  - Light Layer 7

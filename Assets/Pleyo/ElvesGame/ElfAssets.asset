@@ -1,0 +1,74 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fa4009b2e462e5041bc26ba99bb26b2e, type: 3}
+  m_Name: ElfAssets
+  m_EditorClassIdentifier: Assembly-CSharp::ElfAssets
+  ElfModel: {fileID: 2812004023831726623, guid: 1f201ea586d14d1b8f8051958182a69d, type: 3}
+  ElfController: {fileID: 9100000, guid: 13e556d815e3746479cb929a7abd9dd1, type: 2}
+  ElfBodies:
+  - {fileID: 9048077219780403455, guid: 612e713bfa8142758c98b9112dca202a, type: 3}
+  - {fileID: 2176721902359944379, guid: c49c9e5b78d54de3a9c7c02d3383ef29, type: 3}
+  - {fileID: 7945091823169681325, guid: 5961978e59424c2da1851453687f22b2, type: 3}
+  - {fileID: -1830870998183431705, guid: 242b0dc5f4f0490096dc72830376d2fe, type: 3}
+  ElfFaces:
+  - {fileID: 7554961855229222057, guid: aef1fe00d2104c8aaec13da77c09950d, type: 3}
+  - {fileID: 7789941019589327193, guid: 7ee4864ac8074a28a09370c05b77b4af, type: 3}
+  - {fileID: -5434416156686821163, guid: 2634ca2ea4984a68ba586f2510168b43, type: 3}
+  - {fileID: -2447494612718224515, guid: c7be267a9f244faa811b1636153e468a, type: 3}
+  ElfHairs:
+  - {fileID: -7840697787668821939, guid: bdaeae72e94044859c685ca2142f18fc, type: 3}
+  - {fileID: -6043340416718389272, guid: 123a168dfac84c1c87ae1f99fa7180fa, type: 3}
+  - {fileID: -2160950620445992622, guid: a33c34617d7e461cb2421145be1e91c1, type: 3}
+  - {fileID: 6830312907567710579, guid: 6ec6781afc5f4ee8856800a59cffcdce, type: 3}
+  - {fileID: -2942217772744370684, guid: d40c0110e6e04be8a07ed19f49744d6e, type: 3}
+  ElfOutwear:
+  - {fileID: 4041450190801534078, guid: 6e57074eb4e2476489598dd919720eea, type: 3}
+  - {fileID: -2085069527224731559, guid: 74e7cfb15fcd44d39f8b475c9d622b37, type: 3}
+  - {fileID: -1532456528610276152, guid: 145f010ee07b45339188962e3c8d3f56, type: 3}
+  ElfHat: {fileID: 4324725956384583524, guid: d2294e1765384e0399a8034835529c84, type: 3}
+  ElfHeight: 3.2
+  RawBlock: {fileID: 3810148002973527318, guid: 2507e3391f9d5f443b26d889334d12ec, type: 3}
+  CarvedToys:
+  - {fileID: 8589433130373931723, guid: 5cc76679dd872624ba5ca3a046f05249, type: 3}
+  - {fileID: 5042191526972869350, guid: 567aebafc8d0cab4685afbe64efe978c, type: 3}
+  Presents:
+  - {fileID: 824859079639367089, guid: d36e53c4a70c0164cb160034374b0626, type: 3}
+  - {fileID: 8332141574313386917, guid: b28db49736e3fa04baf37b76e1f33b3f, type: 3}
+  - {fileID: 452850718894226819, guid: 0d09eddee9c925d478d60e512c0b364f, type: 3}
+  - {fileID: 4533930734416848743, guid: 91e611e642f1ddd4096eb2a556cec535, type: 3}
+  - {fileID: 3508444086843874754, guid: 460635f8eb76ef24985c78c4adb4b354, type: 3}
+  - {fileID: 1270345106576592302, guid: f9432ef1dbf5ce944b47fb2397d4ba7e, type: 3}
+  CarvedMainColors:
+  - {r: 0.045420904, g: 0.62391806, b: 0.9363001, a: 1}
+  - {r: 0.09241906, g: 0.41050503, b: 0.7931671, a: 1}
+  PresentMainColors:
+  - {r: 0.40755454, g: 0.14366305, b: 0.64259523, a: 1}
+  - {r: 0.09651971, g: 0.5073219, b: 0.3385751, a: 1}
+  - {r: 0.8241365, g: 0.1735708, b: 0.20198783, a: 1}
+  - {r: 0.87760466, g: 0.26517943, b: 0.14893757, a: 1}
+  - {r: 0.008030201, g: 0.5378892, b: 0.7801204, a: 1}
+  - {r: 0.36283192, g: 0.60356015, b: 0.21810792, a: 1}
+  UnpaintedWood: {fileID: 2100000, guid: ab1acb3ae89d89943b490c0e2618e3ae, type: 2}
+  MachinePrefab: {fileID: 3157282454805880109, guid: 6034494960970454e931aaa1614d1407, type: 3}
+  ClawPrefab: {fileID: 3358099348552936554, guid: d1b68cdd6508667408eea593a9a217f1, type: 3}
+  SleighPrefab: {fileID: 5000721293731214900, guid: 2422249404c62724385e2e13d675b9e1, type: 3}
+  BinPrefab: {fileID: 5521793610113598318, guid: 3b739e0fa4eb2524e8b2db7e9fbe5769, type: 3}
+  ButtonPrefab: {fileID: 856927442888279831, guid: 1d2bde83f3aae194296b8addc3aa0d61, type: 3}
+  SparklePrefab: {fileID: 9185805412352392100, guid: 95a1bac299e80984e810a3368de86039, type: 3}
+  Font: {fileID: 11400000, guid: 20e4ca29c4f50c24486f67bf29044c13, type: 2}
+  FontOutline: {fileID: 2100000, guid: 4c79a6c1299b1c7419da7122c32b85a4, type: 2}
+  FontBlackOutline: {fileID: 2100000, guid: a3246c359bf1c9548aa550267c8ca5b7, type: 2}
+  Rounded: {fileID: 21300000, guid: 88092994fb8047e4c89a589df3c59be8, type: 3}
+  Disc: {fileID: 21300000, guid: 88b9b724fc18fdf4c907afd74669df7b, type: 3}
+  GiftIcon: {fileID: 21300000, guid: 3249068b4ac3a7f4781a02568492e69f, type: 3}
+  WoodPanel: {fileID: 21300000, guid: c905264d5c029684ea4a61faf8e9be7b, type: 3}
+  Paper: {fileID: 21300000, guid: a03bc8dcd8db7014c8de82e1e654f8a8, type: 3}

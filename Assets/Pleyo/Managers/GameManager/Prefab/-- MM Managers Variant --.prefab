@@ -1,0 +1,133 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &2276396382990910918
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 188594141285244781, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1375771805537959931, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4937119129735191925, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_Name
+      value: -- MM Managers Variant --
+      objectReference: {fileID: 0}
+    - target: {fileID: 6093815900164512730, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: SceneList.Array.data[6].SceneName
+      value: GameScene
+      objectReference: {fileID: 0}
+    - target: {fileID: 7079334077870886508, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents:
+    - {fileID: 4362990652020566442, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+    - {fileID: 8287828006190183520, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+    - {fileID: 5627753448937318143, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 1187093429983582090, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5945625180724694343}
+    - targetCorrespondingSourceObject: {fileID: 188594141285244781, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2365486162950426958}
+  m_SourcePrefab: {fileID: 100100000, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+--- !u!1 &1147860849624830540 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1187093429983582090, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+  m_PrefabInstance: {fileID: 2276396382990910918}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &5945625180724694343
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1147860849624830540}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba03e7394eab93944a7707c1d93a357b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Pleyo.Template::PleyoMMSensors
+  AutomaticallyUnparentOnAwake: 1
+  AutoQuitIfNobodyJumpFor3Minutes: 1
+--- !u!1 &2092316942146640555 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 188594141285244781, guid: 0b4f733605cfce44d8a608d3df2d179d, type: 3}
+  m_PrefabInstance: {fileID: 2276396382990910918}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &2365486162950426958
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2092316942146640555}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 218e10fee53dd7448ba62ef5f0394cbc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MyGameManager
+  newGameStateEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  timerEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  GameDuration: -1
+  LeaderboardSceneName: PleyoLeaderboardScene
+  _currentNbPlayers: 12
+  WaitAllPlayerToStart: 1
+  DisplayOnlyActivePlayers: 0
+  MaxDurationToWaitForActivePlayers: 15
+  LoadActivePlayerListFromPreviousScene: 0
+  AutoSaveActivePlayerList: 0
+  GlobalGameOverCountDown: {fileID: 0}
+  RefreshUIRankingAutomatically: 1
+  RefreshUIProgressionAutomatically: 1
