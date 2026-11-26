@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>World-space score boards (canvases, wood + paper like ElfHud.WoodCard): one board per team on the sleighs
 /// of the claw row (step, letters, score; yellow paper = leading team), and one board per player on the belt front in
-/// front of his machine (letter, his score). Gifts / unfinished gifts are on the HUD (ElfHud.SetStats).</summary>
+/// front of his machine (his score, in his color). Gifts / unfinished gifts are on the HUD (ElfHud.SetStats).</summary>
 public class ElfBoards
 {
     static float PX = 0.0063f; // meters per canvas pixel: set so a stat board is 85% of a sleigh wide
@@ -44,24 +44,28 @@ public class ElfBoards
                 Pose belt = ElfPath.At(x);
                 Transform paper = Board(root, "PlayerBoard", new Pose(belt.position + belt.rotation * new Vector3(0f, beltTop, beltFrontZ), belt.rotation), ElfHud.SQUARE_W, m + station.Index, out Transform canvas);
                 canvas.localScale = Vector3.one * BELT_PX;
-                TextMeshProUGUI text = ElfHud.Text(paper, "Score", 34f, TextAlignmentOptions.Center, ElfHud.WoodInk);
+                TextMeshProUGUI text = ElfHud.Text(paper, "Score", 96f, TextAlignmentOptions.Center, Color.white);
                 text.rectTransform.offsetMin = new Vector2(6f, 4f);
                 text.rectTransform.offsetMax = new Vector2(-6f, -4f);
-                text.lineSpacing = -14f;
-                _players.Add(new PlayerBoard { Station = station, Member = m, Text = text, Plain = letter(station.Members[m]), Letter = $"<color=#{ColorUtility.ToHtmlStringRGB(color(station.Members[m]) * 0.85f)}>{letter(station.Members[m])}</color>" });
+                if (ElfArt.Assets != null && ElfArt.Assets.FontBlackOutline != null) text.fontSharedMaterial = ElfArt.Assets.FontBlackOutline;
+                text.outlineWidth = 0.32f; // thick black outline
+                text.outlineColor = Color.black;
+                _players.Add(new PlayerBoard { Station = station, Member = m, Text = text, Color = color(station.Members[m]) });
             }
     }
 
-    class PlayerBoard { public ElfStation Station; public int Member; public TextMeshProUGUI Text; public string Letter, Plain; }
+    class PlayerBoard { public ElfStation Station; public int Member; public TextMeshProUGUI Text; public Color Color; }
     readonly List<PlayerBoard> _players = new List<PlayerBoard>();
 
-    /// <summary>Player boards: letter (grey while inactive) and the toys this player's machine processed.</summary>
+    /// <summary>Player boards: the score of the player's machine, in his color (grey while inactive).</summary>
     public void SetPlayers()
     {
         foreach (PlayerBoard p in _players)
         {
-            string letter = p.Station.IsMemberActive(p.Member) ? p.Letter : $"<color=#64748B>{p.Plain}</color>";
-            string text = $"{letter}\n<size=170%>{p.Station.MemberScore[p.Member]}</size>";
+            // Just the score, in the player color (grey while inactive), thick black outline.
+            string text = p.Station.MemberScore[p.Member].ToString();
+            Color c = p.Station.IsMemberActive(p.Member) ? p.Color : new Color32(0x94, 0xA3, 0xB8, 255);
+            if (p.Text.color != c) p.Text.color = c;
             if (p.Text.text != text) p.Text.text = text;
         }
     }
@@ -76,6 +80,16 @@ public class ElfBoards
         }
     }
 
+
+    /// <summary>Small wood + paper board (child of parent, at pose) with one big number (gifts in a sleigh).</summary>
+    public static TextMeshProUGUI CountBoard(Transform parent, Pose pose, float metersPerPixel)
+    {
+        Transform paper = Board(parent, "CountBoard", pose, ElfHud.SQUARE_W, 1, out Transform canvas);
+        canvas.localScale = Vector3.one * metersPerPixel;
+        TextMeshProUGUI text = ElfHud.Text(paper, "Count", 110f, TextAlignmentOptions.Center, ElfHud.WoodInk);
+        text.text = "0";
+        return text;
+    }
     /// <summary>World-space canvas hung by its top center at position, holding a wood + paper card; returns the paper.</summary>
     static Transform Board(Transform root, string name, Pose pose, float widthPx, int seed, out Transform canvasTransform)
     {

@@ -7,22 +7,19 @@ using UnityEngine;
 /// - Straight: the 1-screen map, along +x (identity rotation).
 /// - Ring: 2-4 screens around a round hall (big tree in the middle); each screen = a quarter of the ring, cameras
 ///   outside looking in, so every team sees the others across the hall.
-/// - Terraces: one row per screen, each row higher and further back, alternately left-to-right and right-to-left; a
-///   ramp at the end of a row lifts the toys to the next one; each camera looks over the rows in front of it.
 /// </summary>
 public static class ElfPath
 {
-    public enum Layout { Straight, Ring, Terraces }
+    public enum Layout { Straight, Ring }
 
     public const float SCREEN = 20f;
     /// <summary>Ring: 4 screens + 6 m for the bin and the spawner between the end and the start of the line.</summary>
     public static readonly float RingRadius = (4f * SCREEN + 6f) / (2f * Mathf.PI);
     public static readonly Vector3 RingCenter = new Vector3(0f, 0f, (4f * SCREEN + 6f) / (2f * Mathf.PI));
-    public const float TERRACE_RISE = 6f, TERRACE_DEPTH = 16f; // deep enough for the camera of a row to stand in front of it, behind the previous row
 
     public static Layout Current = Layout.Straight;
-    /// <summary>Ring / terraces: where the path is in the world (ElfGame sets the map's Belt object pose, so moving the
-    /// Belt in the scene moves the gameplay with it). Straight: ignored.</summary>
+    /// <summary>Ring: where the path is in the world (ElfGame sets the map's Belt object pose, so moving the Belt in the
+    /// scene moves the gameplay with it). Straight: ignored.</summary>
     public static Pose Origin = Pose.identity;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -32,34 +29,11 @@ public static class ElfPath
 
     public static Pose At(float s, Layout layout)
     {
-        Pose local = Local(s, layout);
-        if (layout == Layout.Straight) return local;
-        return new Pose(Origin.position + Origin.rotation * local.position, Origin.rotation * local.rotation);
-    }
-
-    static Pose Local(float s, Layout layout)
-    {
-        switch (layout)
-        {
-            case Layout.Ring:
-            {
-                float a = (s - SCREEN * 0.5f) / RingRadius; // screen 1 centre faces -z (south)
-                Vector3 p = RingCenter + RingRadius * new Vector3(Mathf.Sin(a), 0f, -Mathf.Cos(a));
-                Vector3 inward = (RingCenter - p).normalized;
-                return new Pose(p, Quaternion.LookRotation(inward, Vector3.up));
-            }
-            case Layout.Terraces:
-            {
-                int k = Mathf.Clamp(Mathf.FloorToInt(s / SCREEN), 0, 3);
-                float u = s - k * SCREEN;
-                // Ramp between row k and k + 1: the last metre of a row and the first of the next.
-                if (u >= SCREEN - 1f && k < 3) return Ramp(k, (u - (SCREEN - 1f)) / 2f);
-                if (u < 1f && k > 0) return Ramp(k - 1, (u + 1f) / 2f);
-                return new Pose(RowPoint(k, u), Quaternion.identity);
-            }
-            default:
-                return new Pose(new Vector3(s, 0f, 0f), Quaternion.identity);
-        }
+        if (layout == Layout.Straight) return new Pose(new Vector3(s, 0f, 0f), Quaternion.identity);
+        float a = (s - SCREEN * 0.5f) / RingRadius; // screen 1 centre faces -z (south)
+        Vector3 p = RingCenter + RingRadius * new Vector3(Mathf.Sin(a), 0f, -Mathf.Cos(a));
+        Quaternion rotation = Quaternion.LookRotation((RingCenter - p).normalized, Vector3.up);
+        return new Pose(Origin.position + Origin.rotation * p, Origin.rotation * rotation);
     }
 
     /// <summary>Direction the toys travel at s (world).</summary>
@@ -74,18 +48,5 @@ public static class ElfPath
     {
         Pose pose = At(s);
         return pose.position + pose.rotation * local;
-    }
-
-    static Vector3 RowPoint(int k, float u)
-    {
-        float x = k % 2 == 0 ? u : SCREEN - u;
-        return new Vector3(x, k * TERRACE_RISE, k * TERRACE_DEPTH);
-    }
-
-    static Pose Ramp(int k, float t)
-    {
-        Vector3 a = RowPoint(k, SCREEN - 1f), b = RowPoint(k + 1, 1f);
-        Vector3 p = Vector3.Lerp(a, b, t) + Vector3.up * Mathf.Sin(t * Mathf.PI) * 1f;
-        return new Pose(p, Quaternion.identity);
     }
 }

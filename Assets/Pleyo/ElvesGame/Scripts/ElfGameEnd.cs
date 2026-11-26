@@ -6,11 +6,10 @@ using UnityEngine;
 /// screen then shows; a round gauge counts PODIUM_SECONDS down, then an iris closes the screens and the game quits.</summary>
 public partial class ElfGame
 {
-    [Header("End ceremony (ring / terraces)")]
-    [Tooltip("Camera every screen uses during the ceremony (scene: ---- Workshop Ring ----/Ceremony Camera; it renders to Display 8 in the editor, off in the game). Empty: computed.")]
-    [SerializeField] Camera _ceremonyCamera;
-    [Tooltip("Decor shown only during the ceremony (children of this object).")]
-    [SerializeField] GameObject _ceremonyDecor;
+    // End ceremony objects of the map in use (ElfWorkshop: Ceremony Camera, Ceremony Spots, Décors cérémonie).
+    Camera _ceremonyCamera => _workshop != null ? _workshop.CeremonyCamera : null;
+    GameObject _ceremonyDecor => _workshop != null ? _workshop.CeremonyDecor : null;
+    Transform _ceremonySpots => _workshop != null ? _workshop.CeremonySpots : null;
 
     const float PODIUM_SCALE = 1.5f, END_PAUSE = 1.6f, END_WHITE_IN = 0.5f, END_WHITE_OUT = 0.6f, PODIUM_SECONDS = 8f, IRIS_SECONDS = 1.3f;
     static readonly float[] PODIUM_HEIGHTS = { 2f, 1.4f, 0.9f, 0.5f };
@@ -31,7 +30,7 @@ public partial class ElfGame
             _celebrated = true;
             PlaySfx(_sounds.TimeUp);
             // A malfunction still running stops: lights, belt and spawner back to normal.
-            if (MalfunctionActive) { _malfunctionEnd = -1f; _spawnerPop?.SetShake(0f); if (_alarm != null) _alarm.enabled = false; StopTremor(); SetSfxLoop(null, false); }
+            if (MalfunctionActive) { _malfunctionEnd = -1f; MalfunctionStrength = 0f; _spawnerPop?.SetShake(0f); if (_alarm != null) _alarm.enabled = false; StopTremor(); SetSfxLoop(null, false); }
             for (int i = 0; i < _stations.Count; i++) _stations[i].Celebrate();
         }
         _endTime += dt;
@@ -55,6 +54,13 @@ public partial class ElfGame
             }
             if (p >= PODIUM_SECONDS + IRIS_SECONDS + 0.4f) QuitGame();
         }
+        // Ceremony camera followed every frame: it can be moved in the Scene view during Play (not saved).
+        if (_podiumBuilt && _ceremonyCamera != null)
+            foreach (Camera cam in _cameras)
+            {
+                cam.transform.SetPositionAndRotation(_ceremonyCamera.transform.position, _ceremonyCamera.transform.rotation);
+                cam.fieldOfView = _ceremonyCamera.fieldOfView;
+            }
         for (int i = 0; i < _huds.Count; i++)
         {
             _huds[i].SetWhite(Mathf.Clamp01(white));
@@ -71,7 +77,8 @@ public partial class ElfGame
         _podiumBuilt = true;
         PlaySfx(_sounds.Ceremony);
         if (_ceremonyDecor != null) _ceremonyDecor.SetActive(true);
-        if (_giftPile != null) { BuildCeremony(); HideLine(); return; } // ring / terraces: around the gift socle
+        // Ceremony (no podium) when the map has its gift socle or its own ceremony camera and spots.
+        if (_giftPile != null || (_ceremonyCamera != null && _ceremonySpots != null)) { BuildCeremony(); HideLine(); return; }
         List<ElfTeam> ranked = _teams.FindAll(team => team.HasPlayers);
         if (ranked.Count == 0) ranked = new List<ElfTeam>(_teams);
         ranked.Sort((a, b) => b.Processed.CompareTo(a.Processed));
@@ -141,6 +148,12 @@ public partial class ElfGame
     /// <summary>The line goes away: machines, claws and sleighs, boards, belt, spawner, bin, toys.</summary>
     void HideLine()
     {
+        // 1 screen: the sleighs full of gifts stay for the celebration.
+        if (ElfPath.Current == ElfPath.Layout.Straight)
+        {
+            Transform kept = new GameObject("CeremonySleighs").transform;
+            foreach (ElfStation station in _stations) if (station.IsLoader) station.KeepSleighs(kept);
+        }
         foreach (ElfStation station in _stations) if (station.Root != null) station.Root.gameObject.SetActive(false);
         if (_boardsRoot != null) _boardsRoot.gameObject.SetActive(false);
         if (_bin != null) _bin.gameObject.SetActive(false);
@@ -163,6 +176,14 @@ public partial class ElfGame
     readonly List<Transform> _ceremonyLabels = new List<Transform>();
     bool _facingHooked;
 
+
+    Vector3 SpotsCentre()
+    {
+        Vector3 sum = Vector3.zero;
+        int n = 0;
+        if (_ceremonySpots != null) foreach (Transform team in _ceremonySpots) { sum += team.position; n++; }
+        return n > 0 ? sum / n : ElfPath.At(_viewS.Count > 0 ? _viewS[0] : _screenWidth * 0.5f).position;
+    }
     /// <summary>Ceremony labels face whichever screen camera is rendering (every screen reads them the right way).</summary>
     void FaceLabels(UnityEngine.Rendering.ScriptableRenderContext context, Camera cam)
     {
@@ -178,7 +199,8 @@ public partial class ElfGame
         List<ElfTeam> ranked = _teams.FindAll(team => team.HasPlayers);
         if (ranked.Count == 0) ranked = new List<ElfTeam>(_teams);
         ranked.Sort((a, b) => b.Processed.CompareTo(a.Processed));
-        Vector3 centre = _giftPile.position;
+        // Centre: the gift socle, or (no socle: 1-screen map) the middle of the ceremony spots.
+        Vector3 centre = _giftPile != null ? _giftPile.position : SpotsCentre();
         float floorY = ElfPath.At(0f).position.y, radius = _pileRadius + 2.2f;
 
         // The one camera: the scene's Ceremony Camera (pose and field of view) if set, else from screen 1's side,
@@ -235,11 +257,14 @@ public partial class ElfGame
             float side = si == 0 ? 1f : -1f, first = cursor[si];
             angle = side * (first + (elves.Count - 1) * elfStep * 0.5f); // lateral position of the team centre
             cursor[si] += elves.Count * elfStep + teamGap;
+            // Scene spots (Ceremony Spots / Team N / Elf N), when set: the team at rank i takes group i.
+            Transform group = _ceremonySpots != null && i < _ceremonySpots.childCount ? _ceremonySpots.GetChild(i) : null;
             for (int e = 0; e < elves.Count; e++)
             {
                 float x = side * (first + e * elfStep);
                 Vector3 p = centre + right * x + dir * depth;
                 p.y = floorY;
+                if (group != null) p = e < group.childCount ? group.GetChild(e).position : group.position + group.right * (1.7f * e);
                 ElfAvatar elf = elves[e];
                 elf.SetActive(true);
                 elf.Root.SetParent(ring, true);
@@ -251,6 +276,7 @@ public partial class ElfGame
             // Label above the middle of the team.
             Vector3 top = centre + right * angle + dir * depth;
             top.y = floorY + 5.2f;
+            if (group != null) top = group.position + Vector3.up * 5.2f;
             TMPro.TextMeshPro label = ElfArt.Label(ring, Vector3.zero, $"<size=150%>#{rank + 1}</size>\n{team.Name.Substring(team.Name.IndexOf(". ") + 1).Trim()}  {team.Processed}", 6f, PODIUM_COLORS[Mathf.Min(rank, PODIUM_COLORS.Length - 1)]);
             label.transform.position = top;
             _ceremonyLabels.Add(label.transform);

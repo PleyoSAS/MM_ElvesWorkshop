@@ -16,9 +16,17 @@ public class ElfWorkshop : MonoBehaviour
     [Tooltip("Belt material scrolled to show the belt moving (instance made at runtime). Optional.")]
     public Material BeltMaterial;
     public Vector2 BeltScroll = new Vector2(0f, -0.25f);
-    [Tooltip("Map shape (ElfPath): Straight = 1 screen; Ring / Terraces = 2-4 screens. ElfGame shows the matching root.")]
+    [Tooltip("Map shape (ElfPath): Straight = 1 screen; Ring = 2-4 screens. ElfGame shows the matching root.")]
     public ElfPath.Layout Layout = ElfPath.Layout.Straight;
     [Tooltip("Curved maps: path distance of the spawn point and of each belt tile (child order), set by the builder.")]
     public float SpawnS = 0.4f;
     public float[] TileS;
+
+    [Header("End ceremony of this map")]
+    [Tooltip("Camera every screen uses during the ceremony (renders to Display 8 in the editor to preview it, off in the game).")]
+    public Camera CeremonyCamera;
+    [Tooltip("Where the elves stand: one child per team in rank order (Team 1 = winners), its children = the elves' spots; the label goes above the team object.")]
+    public Transform CeremonySpots;
+    [Tooltip("Decor shown only during the ceremony (children of this object).")]
+    public GameObject CeremonyDecor;
 }

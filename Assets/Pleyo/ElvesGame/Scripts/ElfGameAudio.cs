@@ -34,7 +34,7 @@ public partial class ElfGame
     void TickMusic(float dt, bool ending)
     {
         if (_music == null) return;
-        _music.pitch = Mathf.MoveTowards(_music.pitch, MalfunctionActive ? _malfunctionMusicPitch : 1f, dt * 0.6f);
+        _music.pitch = Mathf.MoveTowards(_music.pitch, Mathf.Lerp(1f, _malfunctionMusicPitch, MalfunctionStrength), dt * 0.6f);
         if (!ending || _endMusic == null) return;
         if (!_musicEnd.isPlaying) _musicEnd.Play();
         _music.volume = Mathf.MoveTowards(_music.volume, 0f, dt * _musicVolume);

@@ -70,6 +70,8 @@ public class ElfHud : MonoBehaviour
     Color[] _chipColors;
     TextMeshProUGUI[] _chipLabels;
     float[] _pulse;
+    RectTransform _tutMachine, _tutGift;
+    readonly System.Collections.Generic.List<RectTransform> _tutSteps = new System.Collections.Generic.List<RectTransform>();
 
     /// <summary>The player's tile bounces (he just jumped).</summary>
     public void PulseTile(int i) { if (_pulse != null && i < _pulse.Length) _pulse[i] = 1f; }
@@ -87,6 +89,9 @@ public class ElfHud : MonoBehaviour
         TextMeshProUGUI title = Text(card, "Title", 70f, TextAlignmentOptions.Center, ElfArt.Ink);
         Place(title.rectTransform, new Vector2(0f, 345f), new Vector2(1400f, 90f));
         title.text = ElfLoc.Get("TUTO_JOIN");
+        title.enableAutoSizing = true;
+        title.fontSizeMin = 36f;
+        title.fontSizeMax = 70f;
 
         // Time gauge under the title.
         Image back = Child(card, "GaugeBack", new Vector2(620f, 22f), WhiteSprite(), new Color32(0xE2, 0xE8, 0xF0, 255));
@@ -126,6 +131,7 @@ public class ElfHud : MonoBehaviour
             if (p == 0 && machine != null)
             {
                 Image picture = Child(pt, "Picture", Vector2.zero, machine, Color.white);
+                _tutMachine = (RectTransform)picture.transform;
                 picture.preserveAspect = true;
                 Place((RectTransform)picture.transform, new Vector2(0f, 62f), new Vector2(440f, 290f));
             }
@@ -134,7 +140,9 @@ public class ElfHud : MonoBehaviour
                 for (int s = 0; s < steps.Length; s++)
                 {
                     if (steps[s] == null) continue;
-                    Place((RectTransform)Child(pt, "Step" + s, Vector2.zero, steps[s], Color.white).transform, new Vector2((s - 1.5f) * 112f, 62f), new Vector2(96f, 96f));
+                    RectTransform step = (RectTransform)Child(pt, "Step" + s, Vector2.zero, steps[s], Color.white).transform;
+                    Place(step, new Vector2((s - 1.5f) * 112f, 62f), new Vector2(96f, 96f));
+                    _tutSteps.Add(step);
                     if (s == steps.Length - 1) continue;
                     TextMeshProUGUI arrow = Text(pt, "Arrow", 44f, TextAlignmentOptions.Center, new Color32(0xB4, 0x53, 0x09, 255));
                     Place(arrow.rectTransform, new Vector2((s - 1f) * 112f, 62f), new Vector2(30f, 60f));
@@ -146,25 +154,52 @@ public class ElfHud : MonoBehaviour
                 Image gift = Child(pt, "Unfinished", Vector2.zero, a != null ? a.GiftIcon : null, a != null && a.GiftIcon != null ? ElfArt.Unfinished : new Color(0f, 0f, 0f, 0f));
                 gift.preserveAspect = true;
                 Place((RectTransform)gift.transform, new Vector2(0f, 62f), new Vector2(220f, 220f));
+                _tutGift = (RectTransform)gift.transform;
                 TextMeshProUGUI mark = Text(gift.transform, "Mark", 150f, TextAlignmentOptions.Center, new Color(1f, 0.2f, 0.2f));
                 if (a != null && a.FontBlackOutline != null) mark.fontSharedMaterial = a.FontBlackOutline;
                 mark.text = "?";
             }
             TextMeshProUGUI caption = Text(pt, "Caption", 32f, TextAlignmentOptions.Center, ElfArt.Ink);
-            Place(caption.rectTransform, new Vector2(0f, -150f), new Vector2(450f, 110f));
+            Place(caption.rectTransform, new Vector2(0f, -150f), new Vector2(420f, 110f));
             caption.textWrappingMode = TextWrappingModes.Normal;
+            caption.enableAutoSizing = true; // always fits its panel
+            caption.fontSizeMin = 18f;
+            caption.fontSizeMax = 32f;
             caption.text = captions[p];
         }
         _tutorial.SetActive(false);
     }
 
     /// <summary>Shows the tutorial card: remaining time (1 to 0) and which players of this screen jumped.</summary>
-    public void SetTutorial(bool show, float remaining01, bool[] jumped)
+    public void SetTutorial(bool show, float remaining01, bool[] jumped, float alpha = 1f)
     {
         if (_tutorial == null) return;
         if (_tutorial.activeSelf != show) _tutorial.SetActive(show);
         if (!show) return;
         _tutorialGauge.fillAmount = Mathf.Clamp01(remaining01);
+        // Living pictures: the elf machine bobs as if jumping, the toy stages light up one after the other, the
+        // unfinished gift wobbles.
+        float t = Time.time;
+        if (_tutMachine != null)
+        {
+            float hop = Mathf.Abs(Mathf.Sin(t * 3.2f));
+            _tutMachine.anchoredPosition = new Vector2(0f, 62f + hop * 10f);
+            _tutMachine.localScale = new Vector3(1f + (1f - hop) * 0.04f, 1f - (1f - hop) * 0.04f, 1f);
+        }
+        for (int s = 0; s < _tutSteps.Count; s++)
+        {
+            float k = Mathf.Clamp01(1f - Mathf.Abs(Mathf.Repeat(t * 1.2f, _tutSteps.Count + 1f) - s - 0.5f) * 2f);
+            _tutSteps[s].localScale = Vector3.one * (1f + k * 0.3f);
+        }
+        if (_tutGift != null)
+        {
+            _tutGift.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(t * 5f) * 7f);
+            _tutGift.localScale = Vector3.one * (1f + Mathf.Abs(Mathf.Sin(t * 2.5f)) * 0.06f);
+        }
+        CanvasGroup group = _tutorial.GetComponent<CanvasGroup>();
+        if (group == null) group = _tutorial.AddComponent<CanvasGroup>();
+        group.alpha = alpha; // fade in / out
+        _tutorial.transform.localScale = Vector3.one * (0.94f + 0.06f * alpha);
         for (int i = 0; i < _chips.Length && i < jumped.Length; i++)
         {
             _chips[i].color = jumped[i] ? _chipColors[i] : new Color32(0x6B, 0x72, 0x80, 255);
@@ -228,39 +263,51 @@ public class ElfHud : MonoBehaviour
         _splash.GetComponent<CanvasGroup>().alpha = Mathf.Clamp01((1f - t) / 0.12f);
     }
 
-    /// <summary>Top-left white card: gifts delivered, unfinished gifts loaded (shown with the timer).</summary>
+    /// <summary>Two small white squares on both sides of the timer: a gift with the gifts delivered written over it
+    /// (left), a grey gift with "?" and the unfinished gifts loaded (right). Shown with the timer.</summary>
     void BuildStats()
     {
-        ElfAssets a = ElfArt.Assets;
-        _statsCard = CardBox(transform, "Stats", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -24f), new Vector2(470f, 190f));
-        _giftsText = StatRow(_statsCard.transform, 45f, a != null ? a.GiftIcon : null, Color.white, false);
-        _unfinishedText = StatRow(_statsCard.transform, -45f, a != null ? a.GiftIcon : null, ElfArt.Unfinished, true);
+        _statsCard = new GameObject("GiftStats", typeof(RectTransform));
+        _statsCard.transform.SetParent(transform, false);
+        RectTransform root = (RectTransform)_statsCard.transform;
+        root.anchorMin = root.anchorMax = root.pivot = new Vector2(0.5f, 1f);
+        root.anchoredPosition = Vector2.zero;
+        root.sizeDelta = Vector2.zero;
+        _giftsText = StatSquare(root, -200f, Color.white, false);
+        _unfinishedText = StatSquare(root, 200f, ElfArt.Unfinished, true);
         _statsCard.SetActive(false);
     }
 
-    static TextMeshProUGUI StatRow(Transform card, float y, Sprite icon, Color tint, bool mark)
+    TextMeshProUGUI StatSquare(Transform root, float x, Color iconTint, bool mark)
     {
-        Image image = Child(card, "Icon", Vector2.zero, icon, icon != null ? tint : new Color(0f, 0f, 0f, 0f));
-        image.preserveAspect = true;
-        Place((RectTransform)image.transform, new Vector2(-170f, y), new Vector2(78f, 78f));
+        ElfAssets a = ElfArt.Assets;
+        GameObject box = CardBox(root, mark ? "Unfinished" : "Gifts", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x, -24f), new Vector2(110f, 110f));
+        Image icon = Child(box.transform, "Icon", Vector2.zero, a != null ? a.GiftIcon : null, a != null && a.GiftIcon != null ? iconTint : new Color(0f, 0f, 0f, 0f));
+        icon.preserveAspect = true;
+        PlaceIn((RectTransform)icon.transform, Vector2.zero, new Vector2(92f, 92f));
         if (mark)
         {
-            TextMeshProUGUI q = Text(image.transform, "Mark", 60f, TextAlignmentOptions.Center, new Color(1f, 0.2f, 0.2f));
-            if (ElfArt.Assets != null && ElfArt.Assets.FontBlackOutline != null) q.fontSharedMaterial = ElfArt.Assets.FontBlackOutline;
+            TextMeshProUGUI q = Text(icon.transform, "Mark", 40f, TextAlignmentOptions.TopRight, new Color(1f, 0.2f, 0.2f));
+            if (a != null && a.FontBlackOutline != null) q.fontSharedMaterial = a.FontBlackOutline;
             q.text = "?";
         }
-        TextMeshProUGUI text = Text(card, "Text", 32f, TextAlignmentOptions.Left, ElfArt.Ink);
-        Place(text.rectTransform, new Vector2(50f, y), new Vector2(340f, 80f));
-        text.lineSpacing = -14f;
+        TextMeshProUGUI text = Text(box.transform, "Count", 58f, TextAlignmentOptions.Center, Color.white);
+        if (a != null && a.FontBlackOutline != null) text.fontSharedMaterial = a.FontBlackOutline;
+        PlaceIn(text.rectTransform, new Vector2(0f, -6f), new Vector2(110f, 80f));
         return text;
     }
+
+    float _giftPop;
+    int _lastGifts = -1;
 
     public void ShowStats(bool show) { if (_statsCard.activeSelf != show) _statsCard.SetActive(show); }
 
     public void SetStats(int gifts, int unfinished)
     {
-        string g = $"<size=75%>{ElfLoc.Get("GIFTS")}</size>\n<color=#B45309><size=140%>{gifts}</size></color>";
-        string u = $"<size=75%>{ElfLoc.Get("UNFINISHED")}</size>\n<size=140%>{unfinished}</size>";
+        if (gifts != _lastGifts) { if (_lastGifts >= 0) _giftPop = 1f; _lastGifts = gifts; }
+        _giftPop = Mathf.MoveTowards(_giftPop, 0f, Time.deltaTime * 3f);
+        _giftsText.transform.localScale = Vector3.one * (1f + Mathf.Sin(_giftPop * Mathf.PI) * 0.35f); // pops at each gift
+        string g = gifts.ToString(), u = unfinished.ToString();
         if (_giftsText.text != g) _giftsText.text = g;
         if (_unfinishedText.text != u) _unfinishedText.text = u;
     }
@@ -276,7 +323,7 @@ public class ElfHud : MonoBehaviour
     void BuildBoard()
     {
         ElfAssets a = ElfArt.Assets;
-        const float W = 640f, H = W * 1342f / 2000f;
+        const float W = 860f, H = W * 1342f / 2000f;
         _board = new GameObject("CeremonyBoard", typeof(RectTransform));
         _board.transform.SetParent(transform, false);
         RectTransform r = (RectTransform)_board.transform;
@@ -289,7 +336,7 @@ public class ElfHud : MonoBehaviour
         image.raycastTarget = false;
         Color cream = new Color32(0xFF, 0xEB, 0xC8, 255);
         // Main board (interior around the middle of the picture).
-        _boardGifts = Text(_board.transform, "Gifts", 40f, TextAlignmentOptions.Center, cream);
+        _boardGifts = Text(_board.transform, "Gifts", 56f, TextAlignmentOptions.Center, cream);
         PlaceIn(_boardGifts.rectTransform, new Vector2(0f, -0.005f * H), new Vector2(0.66f * W, 0.36f * H));
         _boardGifts.lineSpacing = -20f;
         if (a != null && a.FontBlackOutline != null) _boardGifts.fontSharedMaterial = a.FontBlackOutline;
@@ -297,15 +344,15 @@ public class ElfHud : MonoBehaviour
         Image icon = Child(_board.transform, "UnfinishedIcon", Vector2.zero, a != null ? a.GiftIcon : null, a != null && a.GiftIcon != null ? ElfArt.Unfinished : new Color(0f, 0f, 0f, 0f));
         icon.preserveAspect = true;
         PlaceIn((RectTransform)icon.transform, new Vector2(-0.17f * W, -0.326f * H), new Vector2(0.075f * H * 1.6f, 0.075f * H * 1.6f));
-        TextMeshProUGUI mark = Text(icon.transform, "Mark", 34f, TextAlignmentOptions.Center, new Color(1f, 0.2f, 0.2f));
+        TextMeshProUGUI mark = Text(icon.transform, "Mark", 46f, TextAlignmentOptions.Center, new Color(1f, 0.2f, 0.2f));
         if (a != null && a.FontBlackOutline != null) mark.fontSharedMaterial = a.FontBlackOutline;
         mark.text = "?";
         _boardUnfinished = Text(_board.transform, "Unfinished", 19f, TextAlignmentOptions.Left, cream);
         _boardUnfinished.textWrappingMode = TextWrappingModes.NoWrap;
         PlaceIn(_boardUnfinished.rectTransform, new Vector2(0.045f * W, -0.326f * H), new Vector2(0.36f * W, 0.1f * H));
         _boardUnfinished.enableAutoSizing = true;
-        _boardUnfinished.fontSizeMin = 12f;
-        _boardUnfinished.fontSizeMax = 22f;
+        _boardUnfinished.fontSizeMin = 16f;
+        _boardUnfinished.fontSizeMax = 32f;
         _board.SetActive(false);
     }
 
@@ -579,8 +626,8 @@ public class ElfHud : MonoBehaviour
         float t = Time.time;
         r.anchoredPosition = new Vector2(0f, 150f) + (amount > 0f ? new Vector2(UnityEngine.Random.Range(-14f, 14f), UnityEngine.Random.Range(-10f, 10f)) * amount : Vector2.zero);
         r.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(t * 31f) * 7f * amount);
-        r.localScale = Vector3.one * (1f + Mathf.Abs(Mathf.Sin(t * 11f)) * 0.18f * amount);
-        _big.color = amount > 0f ? (Mathf.PingPong(t * 8f, 1f) > 0.5f ? new Color(1f, 0.25f, 0.15f) : new Color(1f, 0.7f, 0.1f)) : Color.white;
+        r.localScale = Vector3.one * (amount > 0f ? 0.72f + Mathf.Abs(Mathf.Sin(t * 11f)) * 0.12f * amount : 1f); // smaller than the countdown
+        _big.color = amount > 0f ? (Mathf.PingPong(t * 8f, 1f) > 0.5f ? new Color(1f, 0.25f, 0.15f, 0.8f) : new Color(1f, 0.7f, 0.1f, 0.8f)) : Color.white; // slightly see-through
     }
 
     static GameObject CardBox(Transform parent, string name, Vector2 anchor, Vector2 pivot, Vector2 position, Vector2 size)

@@ -16,6 +16,13 @@ public class ElfStation
     const float CLAW_Z = 1.9f, CLAW_SLEIGH_YAW = -180f; // claw column in front of the belt; drops straight toward the camera
     const int SLEIGH_CAPACITY = 16;
     int _rowCount = 1;
+    /// <summary>Most sleighs in the row (1-screen map: the row stops before the wall); the oldest one leaves.</summary>
+    public int MaxSleighs = 4;
+    /// <summary>1-screen map: each sleigh carries a board with the number of gifts in it.</summary>
+    public bool SleighBoards;
+    readonly Dictionary<Transform, TMPro.TextMeshProUGUI> _sleighCounts = new Dictionary<Transform, TMPro.TextMeshProUGUI>();
+    Vector3 _boardLocal;
+    Quaternion _boardLocalRotation;
     readonly List<Transform> _leaving = new List<Transform>();
 
     /// <summary>Sleigh row (loader): path distance of slot i (0 = under the claw, then upstream), and where a score
@@ -71,7 +78,7 @@ public class ElfStation
     float _sleighSpacing;
     int _sleighFill;
     bool _onMachine;
-    float _standY, _standZ;
+    float _standY, _standZ, _socketFloorY = float.NaN;
     public TextMeshPro CounterLabel;
     ElfSquash _squash; // the machine / claw squashes a little when an elf lands on it
 
@@ -216,6 +223,12 @@ public class ElfStation
             _onMachine = true;
             _standY = top.y;
             _standZ = top.z;
+            // Where the button socket must reach: the top of the machine without its piston (the rod sticks out above
+            // the slab and would show under the button).
+            float slab = float.MinValue;
+            foreach (Renderer r in machine.GetComponentsInChildren<Renderer>())
+                if (_piston == null || !r.transform.IsChildOf(_piston)) slab = Mathf.Max(slab, r.bounds.max.y);
+            _socketFloorY = slab > float.MinValue && head == null ? station.InverseTransformPoint(new Vector3(0f, slab, 0f)).y : _standY;
             if (head != null) head.gameObject.SetActive(false);
             label = machine.Find("Label");
         }
@@ -246,6 +259,20 @@ public class ElfStation
         Transform socket = b.Find("Socket");
         float h = b.position.y;
         if (socket != null && h > 0.1f && !_onMachine) { socket.localPosition = new Vector3(0f, -h * 0.5f, 0f); socket.localScale = new Vector3(socket.localScale.x, h * 0.5f, socket.localScale.z); }
+        // On a machine: the black socket reaches down to the machine top (no gap under the button).
+        if (socket != null && _onMachine && socket.GetComponent<Renderer>() != null)
+        {
+            Bounds sb = socket.GetComponent<Renderer>().bounds;
+            float floor = station.TransformPoint(new Vector3(0f, float.IsNaN(_socketFloorY) ? _standY : Mathf.Min(_standY, _socketFloorY), 0f)).y;
+            if (floor < sb.min.y - 0.005f && sb.size.y > 0.001f)
+            {
+                float top = sb.max.y, k = (top - floor) / sb.size.y;
+                Vector3 s = socket.localScale;
+                socket.localScale = new Vector3(s.x, s.y * k, s.z);
+                float newTop = socket.GetComponent<Renderer>().bounds.max.y;
+                socket.position += Vector3.up * (top - newTop); // keep its top under the cap
+            }
+        }
         Transform cap = b.Find("Cap");
         if (cap != null) ElfArt.SetColor(cap.gameObject, color);
         return cap;
@@ -491,6 +518,13 @@ public class ElfStation
         }
     }
 
+
+    /// <summary>End of the game (1-screen ceremony): the sleighs leave the station (hidden with it) and stay in the
+    /// scene, full of gifts.</summary>
+    public void KeepSleighs(Transform parent)
+    {
+        foreach (Transform s in _sleighs) if (s != null) s.SetParent(parent, true);
+    }
     /// <summary>The gifts go to the central pile (ElfGame.ThrowToPile): no sleigh.</summary>
     public void HideSleighs()
     {
@@ -505,6 +539,7 @@ public class ElfStation
         int k = _sleighFill++;
         toy.Park(_pile, new Vector3(((k % 4) - 1.5f) * 0.7f, (k / 8) * 0.55f, ((k / 4) % 2 - 0.5f) * 0.7f));
         _game.LoadToy(toy);
+        if (_sleighCounts.TryGetValue(Sleigh, out TMPro.TextMeshProUGUI count) && count != null) count.text = _sleighFill.ToString();
         if (_sleighFill >= SLEIGH_CAPACITY) NextSleigh();
     }
 
@@ -512,6 +547,14 @@ public class ElfStation
     public void BuildSleighRow(int count)
     {
         _rowCount = Mathf.Max(1, count);
+        if (SleighBoards && Sleigh != null)
+        {
+            // Board pose measured on the sleigh under the claw (slot 0), then reused on every new sleigh.
+            Pose board = SleighBoardPose(0);
+            _boardLocal = Sleigh.InverseTransformPoint(board.position);
+            _boardLocalRotation = Quaternion.Inverse(Sleigh.rotation) * board.rotation;
+            AddSleighBoard(Sleigh);
+        }
         for (int i = _sleighs.Count; i < _rowCount; i++)
         {
             Transform s = Object.Instantiate(_sleighClean, _sleighClean.transform.parent).transform;
@@ -523,6 +566,15 @@ public class ElfStation
         }
     }
 
+
+    /// <summary>Wood board on the front of a sleigh: the number of gifts in it.</summary>
+    void AddSleighBoard(Transform sleigh)
+    {
+        if (!SleighBoards || _sleighCounts.ContainsKey(sleigh)) return;
+        Pose pose = new Pose(sleigh.TransformPoint(_boardLocal), sleigh.rotation * _boardLocalRotation);
+        TMPro.TextMeshProUGUI text = ElfBoards.CountBoard(sleigh, pose, SleighWidth * 0.85f / ElfHud.CARD_W * 0.85f); // small enough to clear the floor
+        _sleighCounts[sleigh] = text;
+    }
     /// <summary>The full sleigh slides left with the others (players watch the row fill up); an empty one pops in
     /// under the claw. The oldest (leftmost) shrinks away: the row keeps its length.</summary>
     void NextSleigh()
@@ -532,6 +584,7 @@ public class ElfStation
         s.gameObject.SetActive(true);
         SetSleighPose(s, _sleighBaseS);
         _sleighS.Insert(0, _sleighBaseS);
+        AddSleighBoard(s);
         s.localScale = Vector3.zero;
         _sleighs.Insert(0, s);
         Sleigh = s;
@@ -543,7 +596,7 @@ public class ElfStation
             Transform counter = s.Find("Counter");
             CounterLabel.transform.SetParent(counter != null ? counter : s, false);
         }
-        while (_sleighs.Count > _rowCount)
+        while (_sleighs.Count > Mathf.Max(_rowCount, MaxSleighs))
         {
             _leaving.Add(_sleighs[_sleighs.Count - 1]); // shrinks away (TickSleighs)
             _sleighs.RemoveAt(_sleighs.Count - 1);

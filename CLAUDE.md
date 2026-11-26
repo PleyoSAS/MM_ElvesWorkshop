@@ -202,3 +202,30 @@ In `SplitScreenWithDynamicWidth Variant`:
   editor, disabled in game) and `Décors cérémonie` (children shown only at the end), both on ElfGame (End ceremony).
 - Toys: ElfGame > Toys: box height (m) and a scale per stage (carved, painted, gift). The button glows a little (30%)
   at each jump, fully when the machine transforms a toy.
+- 2026-11-26 (late): ears placed in the elf's frame (were in world axes: off the head on turned stations); hairstyles
+  Female_03 / Female_09 skipped (through the hat). Malfunction at fixed play times (`_malfunctionTimes` 45, 90 s), 15 s
+  full + 1.5 s ramps (`MalfunctionStrength` drives shake, tremor, spawn rate, music). Ceremony spots in the scene
+  (`---- Workshop Ring ----/Ceremony Spots/Team N/Elf N`, `ElfSpotGizmo` boxes; Team 1 = winners). Player light per elf
+  (ElfGame > Player light, live, per-player overrides by letter order). Blinking garlands: shader `Elves/LedBlink` +
+  `Materials/LedBlink.mat`, menu `Elves Workshop/Make Blinking Garlands In Open Scene` (mesh copies in `Generated/`
+  with the bulb half in vertex colour red).
+- 2026-11-26 (night): terraces map removed (ElfPath: Straight / Ring only; 2-4 screens = ring). 1-screen camera =
+  `_straightCameraPosition` + `_straightCameraRotation` (live in Play, like Ring Camera). Ceremony objects now per map on
+  ElfWorkshop (CeremonyCamera / CeremonySpots / CeremonyDecor): ring (socle) and straight (`---- Workshop ----`, in
+  Workshop.prefab); a map with camera + spots gets the ceremony instead of the podium.
+- Opening: no camera move any more; the iris opens on the splash logo (1.3 s), the tutorial card fades in / out.
+  1-screen line: ends at the right edge of the camera view (`VisibleBeltEnd`, bin just inside) unless
+  `_straightLineEnd` > 0; first machine from x 4.4 (clear of the spawner).
+- 1-screen sleighs: one at start, the next when it is full, at most `_maxSleighs` (4) in the row (the oldest leaves);
+  each sleigh carries a count board (`ElfBoards.CountBoard`); no team boards / gold counter any more. Ceremony camera
+  followed every frame during the ceremony (movable in Play). `Materials/CandyStripes.mat` (+ Textures/CandyStripes.png).
+- Santa (`---- Workshop ----/Decor/Santa`): `Animation/SantaIdle.controller` (idle look-around, listen, wave, in turn),
+  no root motion; in Workshop.prefab. Button socket stretched down to the machine top. Loading: black screen (closed
+  iris), no text card; the iris opens on the logo at the splash.
+- Gift UI V1 = vertical gauge on the right (`ElfHud.BuildStats`): fills toward `_giftGoal` (60), count on top, unfinished
+  under it (the top-left card is gone). Tutorial pictures animated (elf machine hops, toy stages light up in turn, gift
+  wobbles), texts auto-sized. Button socket reaches the slab under the piston rod (`_socketFloorY`).
+- Gift gauge removed: two small white squares next to the timer (gift + count, grey gift "?" + count). Player boards:
+  score only, player colour, thick black outline. Sleigh boards smaller, number bigger. Malfunction title 72% size,
+  80% opaque. 1-screen ceremony: the sleighs full of gifts stay (moved out of the hidden claw station).
+  Build: HomeLoadingPage, GameScene, PleyoOverlay, LoadingScreen, Template_QuitScene; Unity splash off (checked 2026-11-26).

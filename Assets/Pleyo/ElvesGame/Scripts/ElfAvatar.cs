@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
@@ -112,7 +113,7 @@ public class ElfAvatar
             {
                 case "Body": SetPart(r, a.ElfBodies, v, null); break;
                 case "Faces": SetPart(r, a.ElfFaces, v, null); break;
-                case "Hairstyle": SetPart(r, a.ElfHairs, v / 3, null); break;
+                case "Hairstyle": SetPart(r, HatSafeHairs(a.ElfHairs), v / 3, null); break;
                 case "Hat": if (a.ElfHat != null) { r.sharedMesh = a.ElfHat; r.sharedMaterial = clothes; } else r.gameObject.SetActive(false); break;
                 case "Outwear": SetPart(r, a.ElfOutwear, v, clothes); break;
                 case "Pants": r.sharedMaterial = pants; break;
@@ -135,8 +136,10 @@ public class ElfAvatar
                     for (int side = -1; side <= 1; side += 2)
                     {
                         GameObject ear = ElfArt.Prim(PrimitiveType.Sphere, _body, Vector3.zero, new Vector3(0.16f, 0.62f, 0.28f) * s, Skin, "Ear");
-                        ear.transform.position = head.position + new Vector3(side * 0.66f * s, 0.32f * s, 0f);
-                        ear.transform.rotation = Quaternion.Euler(0f, 0f, -side * 55f);
+                        // In the elf's own frame (its station may be turned on the ring map, not along the world axes).
+                        Quaternion facing = _body.rotation;
+                        ear.transform.position = head.position + facing * new Vector3(side * 0.66f * s, 0.32f * s, 0f);
+                        ear.transform.rotation = facing * Quaternion.Euler(0f, 0f, -side * 55f);
                         ear.transform.SetParent(head, true);
                     }
                 }
@@ -156,6 +159,15 @@ public class ElfAvatar
             ElfArt.Prim(PrimitiveType.Cylinder, _body, new Vector3(x, 0.2f, 0f), new Vector3(0.45f, 0.2f, 0.45f), new Color(0.25f, 0.27f, 0.3f));
     }
 
+
+    /// <summary>Hairstyles that stay under the elf hat (Female_03 and Female_09 poke through it).</summary>
+    static Mesh[] HatSafeHairs(Mesh[] all)
+    {
+        if (all == null) return null;
+        List<Mesh> safe = new List<Mesh>();
+        foreach (Mesh m in all) if (m != null && !m.name.Contains("Female_03") && !m.name.Contains("Female_09")) safe.Add(m);
+        return safe.Count > 0 ? safe.ToArray() : all;
+    }
     static void SetPart(SkinnedMeshRenderer r, Mesh[] list, int i, Material m)
     {
         if (list == null || list.Length == 0) { r.gameObject.SetActive(false); return; }

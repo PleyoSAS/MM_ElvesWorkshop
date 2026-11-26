@@ -7,7 +7,12 @@ public partial class ElfGame
 {
     [Header("Event: spawner malfunction")]
     [SerializeField] bool _malfunctions = true;
-    [SerializeField] Vector2 _malfunctionSeconds = new Vector2(10f, 15f);
+    [Tooltip("Play time (seconds after \"Go!\") at which each malfunction starts.")]
+    [SerializeField] float[] _malfunctionTimes = { 45f, 90f };
+    [Tooltip("Full-strength duration (s).")]
+    [SerializeField] float _malfunctionDuration = 15f;
+    [Tooltip("Ramp up before / ramp down after (s).")]
+    [SerializeField] float _malfunctionRamp = 1.5f;
     [SerializeField] float _malfunctionSpawnFactor = 0.45f;
 
     float[] _malfunctionStarts;
@@ -18,19 +23,21 @@ public partial class ElfGame
     public bool AlarmText { get; private set; }
 
     bool MalfunctionActive => _malfunctionEnd > 0f;
+    /// <summary>0 to 1: ramp up, full, ramp down (shake, tremor, faster boxes, music).</summary>
+    public float MalfunctionStrength { get; private set; }
 
     /// <summary>Once per frame while playing (elapsed = play seconds). Sets a big message when it starts.</summary>
     void UpdateMalfunction(float elapsed, ref string message, ref bool big)
     {
         if (!_malfunctions || _spawner == null) return;
         if (_malfunctionStarts == null)
-            _malfunctionStarts = new[] { Random.Range(_playSeconds * 0.28f, _playSeconds * 0.4f), Random.Range(_playSeconds * 0.65f, _playSeconds * 0.76f) };
+            _malfunctionStarts = (float[])_malfunctionTimes.Clone();
         for (int i = 0; i < _malfunctionStarts.Length; i++)
         {
             if (_malfunctionStarts[i] < 0f || elapsed < _malfunctionStarts[i]) continue;
             _malfunctionStarts[i] = -1f;
             _malfunctionBegin = elapsed;
-            _malfunctionEnd = elapsed + Random.Range(_malfunctionSeconds.x, _malfunctionSeconds.y);
+            _malfunctionEnd = elapsed + _malfunctionDuration + 2f * _malfunctionRamp;
             _spawnTimer = Mathf.Min(_spawnTimer, 0.3f);
             if (_alarm == null)
             {
@@ -49,11 +56,14 @@ public partial class ElfGame
         }
         if (!MalfunctionActive) return;
         float left = _malfunctionEnd - elapsed;
+        // Strength: ramps up, full for the duration, ramps down.
+        float ramp = Mathf.Max(0.01f, _malfunctionRamp);
+        MalfunctionStrength = Mathf.Clamp01(Mathf.Min((elapsed - _malfunctionBegin) / ramp, left / ramp));
         AlarmText = elapsed - _malfunctionBegin < 2.6f;
         if (AlarmText) { message = ElfLoc.Get("MALFUNCTION"); big = true; }
-        Tremor(left > 0f ? Mathf.Clamp01(left) : 0f);
-        _spawnerPop?.SetShake(left > 0f ? Mathf.Clamp01(left) : 0f);
-        _alarm.intensity = Mathf.PingPong(Time.time * 16f, 1f) > 0.5f ? 14f : 2f; // flashing
+        Tremor(MalfunctionStrength);
+        _spawnerPop?.SetShake(MalfunctionStrength);
+        _alarm.intensity = (Mathf.PingPong(Time.time * 16f, 1f) > 0.5f ? 14f : 2f) * MalfunctionStrength; // flashing
         if (Time.time >= _nextSpark)
         {
             _nextSpark = Time.time + Random.Range(0.12f, 0.25f);
@@ -65,6 +75,7 @@ public partial class ElfGame
         if (left <= 0f)
         {
             _malfunctionEnd = -1f;
+            MalfunctionStrength = 0f;
             _spawnerPop?.SetShake(0f);
             _alarm.enabled = false;
             StopTremor();
@@ -105,7 +116,7 @@ public partial class ElfGame
         _flickerColor.Clear();
         foreach (Light light in FindObjectsByType<Light>(FindObjectsSortMode.None))
         {
-            if (!light.enabled || light == _alarm || light.type == LightType.Directional || light.name == "Glow" || light.name == "Flash") continue;
+            if (!light.enabled || light == _alarm || light.type == LightType.Directional || light.name == "Glow" || light.name == "Flash" || light.name == "PlayerLight") continue;
             _flicker.Add(light);
             _flickerBase.Add(light.intensity);
             _flickerColor.Add(light.color);

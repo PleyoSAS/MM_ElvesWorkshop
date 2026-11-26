@@ -14,7 +14,7 @@ public partial class ElfGame
     [Header("Lighting (mood, at runtime)")]
     [SerializeField] bool _moodLighting = true;
     [SerializeField] float _teamSpotIntensity = 10f;
-    [SerializeField] float _playerSpotIntensity = 32f;
+
     [SerializeField] float _bloomIntensity = 1.1f;
     [SerializeField] float _vignetteIntensity = 0.32f;
     [SerializeField] float _hazeEnd = 90f;
@@ -22,6 +22,68 @@ public partial class ElfGame
     static readonly Color Moon = new Color(0.5f, 0.62f, 1f);
     const int MAX_MOON_LIGHTS = 12;
 
+
+    /// <summary>Light of a player's elf (ElfGame > Player light): spot or point light, carried by the elf (it follows
+    /// him to the ceremony). Offset in the elf's frame: x right, y up, z backward (negative = toward the camera).</summary>
+    [System.Serializable]
+    public class ElfLightSettings
+    {
+        [Tooltip("Per-player entry: use it instead of the common settings.")]
+        public bool Use;
+        public LightType Type = LightType.Spot;
+        public Color Color = new Color(1f, 0.93f, 0.8f);
+        public float Intensity = 32f;
+        public float Range = 16f;
+        [Range(1f, 179f)] public float SpotAngle = 38f;
+        [Range(1f, 179f)] public float InnerSpotAngle = 24f;
+        public Vector3 Offset = new Vector3(0f, 9f, -3f);
+        [Tooltip("Spot: aimed at this height on the elf.")]
+        public float AimHeight = 1.6f;
+        public bool Shadows;
+    }
+
+    [Header("Player light (one per elf, applied live)")]
+    [SerializeField] ElfLightSettings _playerLight = new ElfLightSettings { Use = true };
+    [Tooltip("Optional per player, by letter order (A, B, C...): tick Use to replace the common settings for that player.")]
+    [SerializeField] ElfLightSettings[] _playerLightOverrides = new ElfLightSettings[0];
+
+    readonly System.Collections.Generic.List<KeyValuePair<ElfAvatar, Light>> _playerLights = new System.Collections.Generic.List<KeyValuePair<ElfAvatar, Light>>();
+    readonly System.Collections.Generic.List<int> _playerLightIds = new System.Collections.Generic.List<int>();
+
+    void BuildPlayerLights()
+    {
+        foreach (ElfStation station in _stations)
+            for (int m = 0; m < station.Avatars.Count; m++)
+            {
+                Light light = new GameObject("PlayerLight").AddComponent<Light>();
+                light.transform.SetParent(station.Avatars[m].Root, false);
+                _playerLights.Add(new KeyValuePair<ElfAvatar, Light>(station.Avatars[m], light));
+                _playerLightIds.Add(station.Members[m]);
+            }
+        UpdatePlayerLights();
+    }
+
+    /// <summary>Every frame: the settings can be tuned in Play mode.</summary>
+    void UpdatePlayerLights()
+    {
+        for (int i = 0; i < _playerLights.Count; i++)
+        {
+            Light light = _playerLights[i].Value;
+            if (light == null) continue;
+            int id = _playerLightIds[i];
+            ElfLightSettings s = id >= 0 && id < _playerLightOverrides.Length && _playerLightOverrides[id] != null && _playerLightOverrides[id].Use ? _playerLightOverrides[id] : _playerLight;
+            Transform elf = _playerLights[i].Key.Root;
+            light.type = s.Type;
+            light.color = s.Color;
+            light.intensity = s.Intensity;
+            light.range = s.Range;
+            light.spotAngle = s.SpotAngle;
+            light.innerSpotAngle = Mathf.Min(s.InnerSpotAngle, s.SpotAngle);
+            light.shadows = s.Shadows ? LightShadows.Soft : LightShadows.None;
+            light.transform.position = elf.position + elf.rotation * s.Offset;
+            if (s.Type == LightType.Spot) light.transform.LookAt(elf.position + Vector3.up * s.AimHeight);
+        }
+    }
     void ApplyLighting()
     {
         if (!_moodLighting || _workshop == null) return;
@@ -34,23 +96,8 @@ public partial class ElfGame
         RenderSettings.ambientEquatorColor = new Color(0.5f, 0.38f, 0.34f);
         RenderSettings.ambientGroundColor = new Color(0.55f, 0.4f, 0.3f);
 
-        // 1. A narrow spot above each player (on his machine), and a wide one above each team with no player.
-        foreach (ElfStation station in _stations)
-            foreach (ElfAvatar avatar in station.Avatars)
-            {
-                Transform elf = avatar.Root;
-                Light spot = new GameObject("PlayerSpot").AddComponent<Light>();
-                spot.transform.SetParent(root, true);
-                spot.transform.position = elf.position + station.Root.rotation * new Vector3(0f, 9f, -3f);
-                spot.transform.LookAt(elf.position + Vector3.up * 1.6f);
-                spot.type = LightType.Spot;
-                spot.spotAngle = 38f;
-                spot.innerSpotAngle = 24f;
-                spot.range = 16f;
-                spot.intensity = _playerSpotIntensity;
-                spot.color = new Color(1f, 0.93f, 0.8f);
-                spot.shadows = LightShadows.None;
-            }
+        // 1. A light on each player (ElfGame > Player light, live), and a wide spot above each team with no player.
+        BuildPlayerLights();
         foreach (ElfTeam team in _teams)
         {
             if (team.Machines.Count == 0 || team.HasPlayers) continue;

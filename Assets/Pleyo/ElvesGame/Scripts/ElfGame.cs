@@ -40,20 +40,20 @@ public partial class ElfGame : MonoBehaviour
     [SerializeField] bool _forceTiledDisplays;
     [Tooltip("Editor: screen k renders to Display k + 1 (open one Game view per display) instead of tiles in one Game view.")]
     [SerializeField] bool _editorDisplayPerScreen = true;
-    [Tooltip("Map used with 2-4 screens (1 screen: the straight workshop).")]
-    [SerializeField] ElfPath.Layout _multiLayout = ElfPath.Layout.Ring;
+    [Tooltip("1-screen map camera position, from the middle of the line at floor level: x along the belt, y up, z backward (negative = toward the room).")]
+    [SerializeField] Vector3 _straightCameraPosition = new Vector3(0.12f, 11.22f, -21.6f);
+    [Tooltip("1-screen map camera rotation, degrees: x = pitch down, y = turn left / right, z = tilt.")]
+    [SerializeField] Vector3 _straightCameraRotation = new Vector3(15f, 0f, 0f);
+    [Tooltip("1-screen map: x where the belt ends (the bin just after). 0 = to the right edge of the camera view.")]
+    [SerializeField] float _straightLineEnd;
+    [Tooltip("1-screen map: most sleighs in the row (the oldest full one leaves), so the row stops before the wall.")]
+    [SerializeField] int _maxSleighs = 4;
     [Tooltip("Ring map camera: height, z (from the belt, negative = outside the ring), pitch.")]
     [SerializeField] Vector3 _ringCamera = new Vector3(7.4f, -19.62f, 7f);
-    [Tooltip("Terraces map camera (each row): height, z, pitch; it stands between its row and the previous one (z > -TERRACE_DEPTH).")]
-    [SerializeField] Vector3 _terraceCamera = new Vector3(12f, -15f, 22f);
     [SerializeField] bool _logJumps;
 
     const float SCREEN_WIDTH = 20f;
 
-    [Header("Camera of each screen (x = center of its screen)")]
-    [SerializeField] float _cameraHeight = 12f;
-    [SerializeField] float _cameraZ = -24f;
-    [SerializeField] float _cameraPitch = 20f;
     // World width shown by each screen: 20 m, 25 m for 1 screen with 3 players (4 stations; no screen continuity to keep).
     float _screenWidth = SCREEN_WIDTH;
     const float WINDOW_SECONDS_MIN = 0.45f;
@@ -99,6 +99,7 @@ public partial class ElfGame : MonoBehaviour
     float _beltY = 1.2f, _spawnX = 1.5f, _beltFrontZ = -1f;
     readonly ElfBoards _boards = new ElfBoards();
     float _endX, _playTimer, _spawnTimer;
+    const float OPEN_IRIS_SECONDS = 1.3f;
     int _spawned;
     bool _ownGameOver, _quitRequested, _celebrated;
     readonly StringBuilder _sb = new StringBuilder();
@@ -136,11 +137,19 @@ public partial class ElfGame : MonoBehaviour
         BuildStations();
         // Sleigh row of the claw in front of the belt: one sleigh per score board, the boards hang on them.
         ElfStation loader = _stations.Find(st => st.IsLoader);
-        if (loader != null) loader.BuildSleighRow(_screens.Count == 1 ? _teams.Count : 1); // several screens: one sleigh per claw
+        // 1 screen: one sleigh at start, the next one when it is full (at most _maxSleighs in the row), a count board on
+        // each; several screens: one sleigh per claw (hidden when the gifts go to the socle).
+        foreach (ElfStation claw in _stations)
+        {
+            if (!claw.IsLoader) continue;
+            claw.SleighBoards = _screens.Count == 1;
+            claw.MaxSleighs = _screens.Count == 1 ? Mathf.Max(1, _maxSleighs) : 1;
+            claw.BuildSleighRow(1);
+        }
         SetupGiftPile();
         _boardsRoot = new GameObject("Boards").transform;
         _boardsRoot.SetParent(_world, false);
-        _boards.Build(_boardsRoot, _teams.Count, _screens.Count == 1 ? loader : null, _stations, GetPlayerColor, GetPlayerLetter, _beltY - 0.05f, _beltFrontZ - 0.03f);
+        _boards.Build(_boardsRoot, _teams.Count, null, _stations, GetPlayerColor, GetPlayerLetter, _beltY - 0.05f, _beltFrontZ - 0.03f);
         BuildViews();
         ApplyLighting();
         StartMusic();
@@ -180,7 +189,7 @@ public partial class ElfGame : MonoBehaviour
         }
         else if (state == EGameState.GAME_LOADING)
         {
-            message = ElfLoc.Get("TUTO_1");
+            message = null; // the screen stays black until the opening (no text card)
         }
         else
         {
@@ -190,13 +199,14 @@ public partial class ElfGame : MonoBehaviour
             if (splash >= 0f && !_splashSound) { _splashSound = true; PlaySfx(_sounds.Splash); }
             for (int i = 0; i < _cameras.Count && i < _cameraPoses.Count; i++)
             {
+                // Recomputed every frame: Straight / Ring Camera can be tuned in Play mode (not saved).
+                if (i < _viewS.Count) _cameraPoses[i] = GamePose(_viewS[i]);
                 Pose game = _cameraPoses[i];
-                float k = splash >= 0f ? 1f - Mathf.SmoothStep(0f, 1f, splash) : 0f;
                 // Screen shake: strong during a malfunction, light when a player of this screen lands.
                 if (i < _camShake.Length) _camShake[i] = Mathf.MoveTowards(_camShake[i], 0f, dt * 4f);
                 float shake = EventShake * 0.14f + (i < _camShake.Length ? _camShake[i] : 0f) * 0.05f;
                 Vector3 jitter = shake > 0f ? new Vector3(Mathf.PerlinNoise(time * 23f, i) - 0.5f, Mathf.PerlinNoise(i, time * 23f) - 0.5f, 0f) * 2f * shake : Vector3.zero;
-                _cameras[i].transform.SetPositionAndRotation(game.position + game.rotation * (new Vector3(0f, 6f, 2f) * k + jitter), game.rotation * Quaternion.Euler(28f * k, 0f, jitter.x * 6f));
+                _cameras[i].transform.SetPositionAndRotation(game.position + game.rotation * jitter, game.rotation * Quaternion.Euler(0f, 0f, jitter.x * 6f));
             }
             // Tutorial: one card (rules, unfinished gift, time gauge, jump check of the screen's players). A player
             // who does not jump during it stays inactive until his first jump.
@@ -236,6 +246,7 @@ public partial class ElfGame : MonoBehaviour
         UpdateToys(dt);
         TickFlights(dt);
         _spawnerPop?.Tick(dt);
+        UpdatePlayerLights();
         TickMusic(dt, _endTime >= END_PAUSE);
         ElfToy.TickGlows(dt);
         if (_beltMaterial != null && _workshop != null)
@@ -257,8 +268,13 @@ public partial class ElfGame : MonoBehaviour
             bool[] jumped = new bool[players.Count];
             for (int p = 0; p < players.Count; p++)
                 jumped[p] = _byTrampoline.TryGetValue(players[p], out KeyValuePair<ElfStation, int> slot) && slot.Key.IsMemberActive(slot.Value);
-            _huds[i].SetTutorial(tutorial, 1f - (_playTimer - _splashSeconds) / _tutorialSeconds, jumped);
+            // Tutorial card fades in and out.
+            float tutorialT = _playTimer - _splashSeconds;
+            _huds[i].SetTutorial(tutorial, 1f - tutorialT / _tutorialSeconds, jumped, Mathf.Clamp01(Mathf.Min(tutorialT, _tutorialSeconds - tutorialT) / 0.45f));
             _huds[i].SetSplash(splash);
+            // Opening: the circle opens on the logo (splash).
+            // Black (closed circle) while the game loads, then the circle opens on the logo (splash).
+            if (!gameOver) _huds[i].SetIris(state == EGameState.GAME_LOADING ? 0f : splash >= 0f ? Mathf.Clamp01(_playTimer / OPEN_IRIS_SECONDS) : 1f);
             _huds[i].SetBigShake(AlarmText ? 1f : 0f); // malfunction title shakes
             _huds[i].ShowStats(playing); // gifts card during the play (the end board takes over)
         }
@@ -420,7 +436,7 @@ public partial class ElfGame : MonoBehaviour
         _spawnTimer -= dt;
         if (_spawnTimer > 0f) return;
         int[] beats = elapsed < 30f ? new[] { 3, 4, 4, 5 } : elapsed < 80f ? new[] { 2, 3, 3, 4 } : new[] { 2, 2, 3, 3, 4 };
-        _spawnTimer = beats[Random.Range(0, beats.Length)] * GetEffectivePeriod() * SpawnFactor() * (MalfunctionActive ? _malfunctionSpawnFactor : 1f);
+        _spawnTimer = beats[Random.Range(0, beats.Length)] * GetEffectivePeriod() * SpawnFactor() * Mathf.Lerp(1f, _malfunctionSpawnFactor, MalfunctionStrength);
         ElfToy toy = new ElfToy();
         toy.Init(_world, _spawnX, _beltY, _spawned++ % 2);
         toy.SetGhost(!_lineLive);
@@ -647,7 +663,7 @@ public partial class ElfGame : MonoBehaviour
 
             // Machines packed left to right on their screen (after the spawner on screen 1, before the bin on the last).
             int n = machines.Count;
-            float from = s == 0 ? 3.2f : 0.6f;
+            float from = s == 0 ? 4.4f : 0.6f; // screen 1: clear of the spawner machine
             float to = s == count - 1 ? _endX - s * _screenWidth - 0.3f : _screenWidth - 1.6f;
             float[] left = new float[n], right = new float[n];
             float total = 0f;
@@ -690,11 +706,6 @@ public partial class ElfGame : MonoBehaviour
                 station.Build(this, _stations.Count, team.Steps, members, x, _world, _beltY, offsets, TakeSceneStation(team.Steps));
                 for (int m = 0; m < station.Members.Count; m++)
                     _byTrampoline[station.Members[m]] = new KeyValuePair<ElfStation, int>(station, m);
-                if (station.Sleigh != null && _screens.Count == 1) // several screens: no UI on the sleighs
-                {
-                    station.CounterLabel = ElfArt.Label(station.Sleigh.Find("Counter") ?? station.Sleigh, Vector3.zero, "0", 12f, ElfArt.Gold);
-                    _sleighLabels.Add(station.CounterLabel);
-                }
                 team.Machines.Add(station);
                 _stations.Add(station);
             }
@@ -739,9 +750,9 @@ public partial class ElfGame : MonoBehaviour
     /// hidden; adds the bin at the end of the line.</summary>
     void SetupWorkshop()
     {
-        // Map: the straight workshop for 1 screen, the ring or the terraces (_multiLayout) for 2-4 screens. Each map is a
+        // Map: the straight workshop for 1 screen, the ring for 2-4 screens. Each map is a
         // root with ElfWorkshop in the scene (Layout field); the other maps are hidden.
-        ElfPath.Layout layout = _screens.Count > 1 ? _multiLayout : ElfPath.Layout.Straight;
+        ElfPath.Layout layout = _screens.Count > 1 ? ElfPath.Layout.Ring : ElfPath.Layout.Straight;
         _workshop = null;
         foreach (ElfWorkshop w in FindObjectsByType<ElfWorkshop>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             if (w.Layout == layout || (_workshop == null && w.Layout == ElfPath.Layout.Straight)) _workshop = w;
@@ -764,6 +775,8 @@ public partial class ElfGame : MonoBehaviour
             _world = _workshop.transform;
             bool straight = layout == ElfPath.Layout.Straight;
             _beltY = straight ? BeltTop(_workshop) : _workshop.BeltTopY;
+            // 1 screen: the line runs to the right edge of what the camera shows (the bin just inside it).
+            if (straight && _screens.Count == 1) _endX = _straightLineEnd > 0f ? _straightLineEnd : Mathf.Max(12f, VisibleBeltEnd() - 2.4f);
             if (straight && _workshop.Belt != null && _workshop.Belt.childCount > 0) _beltFrontZ = ElfArt.GetBounds(_workshop.Belt.gameObject).min.z;
             if (_workshop.SpawnPoint != null) _spawnX = straight ? _workshop.SpawnPoint.position.x : _workshop.SpawnS;
             if (_workshop.Belt != null)
@@ -918,8 +931,8 @@ public partial class ElfGame : MonoBehaviour
             // Same framing on every layout, in the belt frame (ring: outside looking in; terraces: in front of and above
             // its row).
             Pose view = ElfPath.At(cx);
-            Vector3 cameraSet = ElfPath.Current == ElfPath.Layout.Ring ? _ringCamera : ElfPath.Current == ElfPath.Layout.Terraces ? _terraceCamera : new Vector3(_cameraHeight, _cameraZ, _cameraPitch);
-            camObject.transform.SetPositionAndRotation(view.position + view.rotation * new Vector3(0f, cameraSet.x, cameraSet.y), view.rotation * Quaternion.Euler(cameraSet.z, 0f, 0f));
+            Pose gamePose = GamePose(cx);
+            camObject.transform.SetPositionAndRotation(gamePose.position, gamePose.rotation);
             _cameraPoses.Add(new Pose(camObject.transform.position, camObject.transform.rotation));
             _viewS.Add(cx);
             UniversalAdditionalCameraData urp = camObject.AddComponent<UniversalAdditionalCameraData>();
@@ -956,6 +969,31 @@ public partial class ElfGame : MonoBehaviour
         }
     }
 
+
+
+    /// <summary>1-screen map: x of the right edge of the camera view along the belt (16:9 display).</summary>
+    float VisibleBeltEnd()
+    {
+        Pose cam = GamePose(_screenWidth * 0.5f);
+        float tanH = Mathf.Tan(35f * 0.5f * Mathf.Deg2Rad) * 16f / 9f;
+        Quaternion inverse = Quaternion.Inverse(cam.rotation);
+        float lo = _screenWidth * 0.5f, hi = 120f;
+        for (int i = 0; i < 30; i++)
+        {
+            float x = (lo + hi) * 0.5f;
+            Vector3 local = inverse * (new Vector3(x, _beltY, 0f) - cam.position);
+            if (local.z > 0.1f && local.x / (local.z * tanH) < 1f) lo = x; else hi = x;
+        }
+        return lo;
+    }
+    /// <summary>Game pose of a screen camera aiming at path distance s, from the map's camera setting.</summary>
+    Pose GamePose(float s)
+    {
+        Pose view = ElfPath.At(s);
+        if (ElfPath.Current == ElfPath.Layout.Straight)
+            return new Pose(view.position + view.rotation * _straightCameraPosition, view.rotation * Quaternion.Euler(_straightCameraRotation));
+        return new Pose(view.position + view.rotation * new Vector3(0f, _ringCamera.x, _ringCamera.y), view.rotation * Quaternion.Euler(_ringCamera.z, 0f, 0f));
+    }
     void EnsureEventSystem()
     {
         if (FindAnyObjectByType<EventSystem>() != null) return;

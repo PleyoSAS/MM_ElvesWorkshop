@@ -9,7 +9,10 @@ public static class ElfImageTools
     /// <summary>Cuts an illustration out of its white background: flood fill from the borders through near-white
     /// pixels (the drawing's outline stops it), soft edge on the pixels touching the background. Saves a PNG at
     /// dstAsset (project path) imported as a sprite.</summary>
-    public static string CutOutWhite(string srcFile, string dstAsset)
+    public static string CutOutWhite(string srcFile, string dstAsset) { return CutOutWhite(srcFile, dstAsset, new Vector2Int[0]); }
+
+    /// <summary>Same, plus white areas enclosed by the drawing: one seed pixel in each (x, y from the top left).</summary>
+    public static string CutOutWhite(string srcFile, string dstAsset, Vector2Int[] enclosed)
     {
         Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
         tex.LoadImage(File.ReadAllBytes(srcFile));
@@ -20,6 +23,7 @@ public static class ElfImageTools
         System.Func<int, bool> white = i => { Color32 c = px[i]; int min = Mathf.Min(c.r, Mathf.Min(c.g, c.b)), max = Mathf.Max(c.r, Mathf.Max(c.g, c.b)); return min >= 232 && max - min < 20; };
         for (int x = 0; x < w; x++) { Seed(x, queue, bg, white); Seed((h - 1) * w + x, queue, bg, white); }
         for (int y = 0; y < h; y++) { Seed(y * w, queue, bg, white); Seed(y * w + w - 1, queue, bg, white); }
+        foreach (Vector2Int p in enclosed) Seed((h - 1 - p.y) * w + p.x, queue, bg, white);
         while (queue.Count > 0)
         {
             int i = queue.Dequeue(), x = i % w, y = i / w;

@@ -639,13 +639,10 @@ public static class ElvesBuilder
     [MenuItem("Elves Workshop/Build Ring Map In Open Scene")]
     public static string BuildRingMap() { return BuildCurvedMap(ElfPath.Layout.Ring); }
 
-    [MenuItem("Elves Workshop/Build Terraces Map In Open Scene")]
-    public static string BuildTerracesMap() { return BuildCurvedMap(ElfPath.Layout.Terraces); }
 
-    /// <summary>Map for 2-4 screens along ElfPath (ring around a big tree, or terraces): floor, belt tiles (their path
-    /// distance stored in ElfWorkshop.TileS), spawner, walls, decorations and lights. Root "---- Workshop Ring ----" /
-    /// "---- Workshop Terraces ----" (rebuilt: edits lost); ElfGame shows it when the config has 2-4 screens and
-    /// ElfGame._multiLayout matches.</summary>
+    /// <summary>Map for 2-4 screens along ElfPath (ring around a big tree): floor, belt tiles (their path
+    /// distance stored in ElfWorkshop.TileS), spawner, walls, decorations and lights. Root "---- Workshop Ring ----"
+    /// (rebuilt: edits lost); ElfGame shows it when the config has 2-4 screens.</summary>
     static List<GameObject> SceneRoots(string name)
     {
         List<GameObject> found = new List<GameObject>();
@@ -656,8 +653,7 @@ public static class ElvesBuilder
     static string BuildCurvedMap(ElfPath.Layout layout)
     {
         ElfPath.Origin = Pose.identity; // built around the world origin (the game then follows the Belt object)
-        bool ring = layout == ElfPath.Layout.Ring;
-        string rootName = ring ? "---- Workshop Ring ----" : "---- Workshop Terraces ----";
+        const string rootName = "---- Workshop Ring ----";
         // Also finds the inactive root (ElfGame shows the maps at runtime only): no duplicates.
         foreach (GameObject old in SceneRoots(rootName)) Object.DestroyImmediate(old);
         GameObject root = new GameObject(rootName);
@@ -668,11 +664,10 @@ public static class ElvesBuilder
         GameObject floorTile = Load<GameObject>(Furniture + "Prefabs/Floor/Floor_01.prefab");
         GameObject wallPrefab = Load<GameObject>(Furniture + "Prefabs/Walls/Wall_05.prefab");
         GameObject tree = Load<GameObject>(Xmas + "Christmass_tree_indoor_001_toys.prefab");
-        float R = ElfPath.RingRadius, H = ElfPath.TERRACE_RISE, D = ElfPath.TERRACE_DEPTH;
+        float R = ElfPath.RingRadius;
 
-        // Floor (and the terrace platforms).
+        // Floor.
         Transform floor = Empty(root.transform, "Floor", Vector3.zero);
-        if (ring)
         {
             float reach = R + 34f;
             for (float x = -reach; x < reach; x += 4f)
@@ -680,33 +675,14 @@ public static class ElvesBuilder
                     if (new Vector2(x + 2f, z + 2f).magnitude < reach)
                         Retint(PlaceAt(floorTile, floor, ElfPath.RingCenter + new Vector3(x + 2f, 0f, z + 2f), 0f, false), wood4, null);
         }
-        else
-        {
-            for (float x = -12f; x < 32f; x += 4f)
-                for (float z = -32f; z < 4.5f; z += 4f)
-                    Retint(PlaceAt(floorTile, floor, new Vector3(x + 2f, 0f, z + 2f), 0f, false), wood4, null);
-            Material terrace = Mat("TerraceWall", new Color(0.55f, 0.25f, 0.2f));
-            for (int k = 1; k < 4; k++)
-            {
-                Box(floor, "Terrace" + k, new Vector3(10f, k * H * 0.5f, k * D), new Vector3(44f, k * H, D), terrace, true);
-                for (float x = -12f; x < 32f; x += 4f)
-                    for (float z = k * D - D * 0.5f; z < k * D + D * 0.5f - 0.5f; z += 4f)
-                        Retint(PlaceAt(floorTile, floor, new Vector3(x + 2f, k * H, z + 2f), 0f, false), wood4, null);
-            }
-        }
 
-        // Belt: short conveyor tiles along the path (terraces: a ramp tile between two rows).
+        // Belt: short conveyor tiles along the path.
         Transform belt = Empty(root.transform, "Belt", Vector3.zero);
         GameObject conveyor = Load<GameObject>(Factory + "Prefabs/Conveyor/Conveyor_Long.prefab");
         List<float> tileS = new List<float>();
-        float top = 1.2f, piece = ring ? 2f : 2.5f, end = ring ? 4f * ElfPath.SCREEN + 4f : 4f * ElfPath.SCREEN - 2f;
+        float top = 1.2f, piece = 2f, end = 4f * ElfPath.SCREEN + 4f;
         for (float s = -2f; s < end - 0.01f; s += piece)
         {
-            if (!ring)
-            {
-                float u = Mathf.Repeat(s + 0.01f, ElfPath.SCREEN);
-                if (s > 0f && (u >= ElfPath.SCREEN - 1f || u < 1f)) continue; // ramp zone
-            }
             Pose pose = ElfPath.At(s + piece * 0.5f, layout);
             Transform pivot = Empty(belt, "Tile", Vector3.zero);
             pivot.SetPositionAndRotation(pose.position, pose.rotation);
@@ -714,16 +690,6 @@ public static class ElvesBuilder
             top = Bounds(tile).max.y - pose.position.y;
             tileS.Add(s);
         }
-        if (!ring)
-            for (int k = 0; k < 3; k++)
-            {
-                Vector3 a = ElfPath.At(k * ElfPath.SCREEN + ElfPath.SCREEN - 1f, layout).position;
-                Vector3 b = ElfPath.At((k + 1) * ElfPath.SCREEN + 1f, layout).position;
-                Transform pivot = Empty(belt, "Ramp", Vector3.zero);
-                pivot.SetPositionAndRotation((a + b) * 0.5f, Quaternion.FromToRotation(Vector3.right, (b - a).normalized));
-                PlaceAt(conveyor, pivot, Vector3.zero, 90f, false, (b - a).magnitude / 8.11f);
-                tileS.Add(k * ElfPath.SCREEN + ElfPath.SCREEN - 1f);
-            }
         ws.Belt = belt;
         ws.TileS = tileS.ToArray();
         ws.BeltTopY = top;
@@ -745,7 +711,6 @@ public static class ElvesBuilder
         Transform decor = Empty(root.transform, "Decor", Vector3.zero);
         Transform lights = Empty(root.transform, "Lights", Vector3.zero);
         Color warm = new Color(1f, 0.78f, 0.5f);
-        if (ring)
         {
             // Round hall: wall circle facing the centre, giant tree in the middle, presents around it.
             float rw = R + 32f;
@@ -778,23 +743,6 @@ public static class ElvesBuilder
             {
                 Pose p = ElfPath.At(i * ElfPath.SCREEN + ElfPath.SCREEN * 0.5f, layout);
                 PointLight(Empty(lights, "LineLight" + (i + 1), p.position + p.rotation * new Vector3(0f, 8f, -5f)), Vector3.zero, warm, 20f, 6f);
-            }
-        }
-        else
-        {
-            // Back wall behind the last row, trees and presents at the row ends, one light per row.
-            float backZ = 3f * D + D * 0.5f;
-            for (float y = 0f; y < 3f * H + 14f; y += 4f)
-                for (float x = -12f; x < 32f; x += 4f)
-                    Retint(PlaceAt(wallPrefab, walls, new Vector3(x + 2f, y, backZ), 0f, true), red, "Wall_Edge");
-            for (int k = 0; k < 4; k++)
-            {
-                float y = k * H, z = k * D;
-                Fit(tree, decor, new Vector3(-6f, y, z + 2.5f), 4.2f, 0f);
-                Fit(Load<GameObject>(Xmas + "Shugar_cane_001.prefab"), decor, new Vector3(26f, y, z + 3f), 3.2f, 0f);
-                for (int p = 0; p < 3; p++)
-                    Fit(Load<GameObject>(Xmas + $"Present_00{1 + (k + p) % 6}.prefab"), decor, new Vector3(24.5f - p * 0.9f, y, z + 1.5f + (p % 2) * 0.8f), 0.8f - p * 0.1f, p * 30f);
-                PointLight(Empty(lights, "RowLight" + (k + 1), new Vector3(10f, y + 8f, z - 4f)), Vector3.zero, warm, 18f, 6f);
             }
         }
         EditorSceneManager.MarkSceneDirty(root.scene);
