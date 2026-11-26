@@ -19,6 +19,11 @@ public class ElfToy
     public bool Unfinished;
     public int HandledStations;
     public bool IsMoving => _state == 0;
+    /// <summary>0 to 1: the toys on the belt hop and wobble (machine malfunction shaking the belt).</summary>
+    public static float Jolt;
+    /// <summary>Size of the raw box (largest side, m) and scale of each stage relative to it (ElfGame > Toys).</summary>
+    public static float BoxSize = SIZE * 0.8f, CarvedScale = 1f, PaintedScale = 1f, GiftScale = 1f;
+    Vector3 _carvedBase, _giftBase;
 
     static readonly List<ElfToy> Glowing = new List<ElfToy>();
     static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -38,7 +43,7 @@ public class ElfToy
     GameObject _ownerRing;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatics() { Glowing.Clear(); GhostMaterials.Clear(); _block = null; }
+    static void ResetStatics() { Glowing.Clear(); GhostMaterials.Clear(); _block = null; Jolt = 0f; }
 
     public void Init(Transform parent, float x, float beltY, int kind)
     {
@@ -51,7 +56,7 @@ public class ElfToy
 
         Quaternion facing = Root.rotation;
         Root.rotation = Quaternion.identity; // models measured upright (the ring turns the belt)
-        _raw = Model(a != null ? a.RawBlock : null, "Raw", SIZE * 0.8f, false, new Color(0.75f, 0.55f, 0.35f));
+        _raw = Model(a != null ? a.RawBlock : null, "Raw", BoxSize, false, new Color(0.75f, 0.55f, 0.35f));
         int carvedIndex = a != null && a.CarvedToys != null && a.CarvedToys.Length > 0 ? kind % a.CarvedToys.Length : -1;
         _carved = Model(carvedIndex >= 0 ? a.CarvedToys[carvedIndex] : null, "Carved", SIZE, true, new Color(0.86f, 0.68f, 0.46f));
         int giftIndex = a != null && a.Presents != null && a.Presents.Length > 0 ? Random.Range(0, a.Presents.Length) : -1;
@@ -60,6 +65,8 @@ public class ElfToy
         float boxSize = MaxSide(_raw);
         Match(_carved, boxSize);
         Match(_gift, boxSize);
+        _carvedBase = _carved.transform.localScale;
+        _giftBase = _gift.transform.localScale;
         Root.rotation = facing;
         if (carvedIndex >= 0 && a.CarvedMainColors != null && carvedIndex < a.CarvedMainColors.Length) _carvedMain = a.CarvedMainColors[carvedIndex];
         if (giftIndex >= 0 && a.PresentMainColors != null && giftIndex < a.PresentMainColors.Length) _giftMain = a.PresentMainColors[giftIndex];
@@ -223,12 +230,12 @@ public class ElfToy
     public void Hold() { _state = 1; SetOwner(null); }
 
     /// <summary>Drops in the sleigh pile (static from then on).</summary>
-    public void Park(Transform pile, Vector3 localPosition)
+    public void Park(Transform pile, Vector3 localPosition, bool aligned = false)
     {
         _state = 1;
         Root.SetParent(pile, true);
         Root.localPosition = localPosition;
-        Root.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+        Root.localRotation = aligned ? Quaternion.identity : Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
         Root.localScale = Vector3.one * 0.75f;
         _mark.gameObject.SetActive(false);
     }
@@ -261,7 +268,12 @@ public class ElfToy
     void PlaceOnBelt(float beltY)
     {
         Pose p = ElfPath.At(X);
-        Root.SetPositionAndRotation(p.position + p.rotation * new Vector3(0f, beltY, 0f), p.rotation);
+        if (Jolt <= 0f) { Root.SetPositionAndRotation(p.position + p.rotation * new Vector3(0f, beltY, 0f), p.rotation); return; }
+        // Shaken belt: little hops, sway and wobble (never off the belt).
+        float t = Time.time;
+        Vector3 shake = new Vector3(Mathf.Sin(t * 7f + X * 0.5f) * 0.08f, Mathf.Abs(Mathf.Sin(t * 12f + X * 1.7f)) * 0.22f, 0f) * Jolt;
+        Quaternion wobble = Quaternion.Euler(Mathf.Sin(t * 15f + X) * 9f * Jolt, 0f, Mathf.Cos(t * 13f + X) * 9f * Jolt);
+        Root.SetPositionAndRotation(p.position + p.rotation * (new Vector3(0f, beltY, 0f) + shake), p.rotation * wobble);
     }
 
     public void Destroy() { if (Root != null) Object.Destroy(Root.gameObject); }
@@ -273,6 +285,9 @@ public class ElfToy
         _raw.SetActive(!wrapped && !carved);
         _carved.SetActive(!wrapped && carved);
         _gift.SetActive(wrapped);
+        // Stage size (ElfGame > Toys): carved, painted (same model), gift.
+        _carved.transform.localScale = _carvedBase * ((Done & PAINT) != 0 ? PaintedScale : CarvedScale);
+        _gift.transform.localScale = _giftBase * GiftScale;
         bool painted = (Done & PAINT) != 0;
         Material wood = ElfArt.Assets != null ? ElfArt.Assets.UnpaintedWood : null;
         for (int i = 0; i < _carvedRenderers.Length; i++)

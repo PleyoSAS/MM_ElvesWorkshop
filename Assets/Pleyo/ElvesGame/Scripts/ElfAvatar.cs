@@ -241,6 +241,7 @@ public class ElfAvatar
 
     public void Jump(float airDuration)
     {
+        if (_active) _glow = Mathf.Max(_glow, 0.3f); // small light on the button at each jump (full one: transformation)
         _airTime = 0f;
         _airDuration = Mathf.Max(0.25f, airDuration);
         if (_anim == null || _anim.runtimeAnimatorController == null) return;
@@ -295,9 +296,9 @@ public class ElfAvatar
         if (_capMaterial != null && (_glow > 0f || _capLight.enabled))
         {
             _glow = Mathf.MoveTowards(_glow, 0f, deltaTime * 1.4f);
-            _capMaterial.SetColor(EmissionId, _color * (_glow * 10f));
+            _capMaterial.SetColor(EmissionId, _color * (_glow * 3.5f)); // bloom does the rest
             _capLight.enabled = _glow > 0f;
-            _capLight.intensity = _glow * 30f;
+            _capLight.intensity = _glow * 18f;
         }
         if (_sign != null && _sign.activeSelf)
             _sign.transform.localPosition = new Vector3(0f, _height + 1.65f + Mathf.Sin(time * 3f) * 0.12f, -0.3f);

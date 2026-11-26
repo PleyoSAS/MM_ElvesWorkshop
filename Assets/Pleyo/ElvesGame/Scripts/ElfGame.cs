@@ -31,13 +31,19 @@ public partial class ElfGame : MonoBehaviour
     [SerializeField] float _countdownSeconds = 3f;
     [SerializeField] float _playSeconds = 120f;
     [SerializeField] float _beltSpeed = 2.4f;
+    [Header("Toys (size at each stage)")]
+    [Tooltip("Raw wooden box height, in metres. The other stages are matched to its size, then scaled below.")]
+    [SerializeField] float _boxSize = 0.88f;
+    [SerializeField] float _carvedScale = 1f;
+    [SerializeField] float _paintedScale = 1f;
+    [SerializeField] float _giftScale = 1f;
     [SerializeField] bool _forceTiledDisplays;
     [Tooltip("Editor: screen k renders to Display k + 1 (open one Game view per display) instead of tiles in one Game view.")]
     [SerializeField] bool _editorDisplayPerScreen = true;
     [Tooltip("Map used with 2-4 screens (1 screen: the straight workshop).")]
     [SerializeField] ElfPath.Layout _multiLayout = ElfPath.Layout.Ring;
     [Tooltip("Ring map camera: height, z (from the belt, negative = outside the ring), pitch.")]
-    [SerializeField] Vector3 _ringCamera = new Vector3(7.01f, -19.62f, 7f);
+    [SerializeField] Vector3 _ringCamera = new Vector3(7.4f, -19.62f, 7f);
     [Tooltip("Terraces map camera (each row): height, z, pitch; it stands between its row and the previous one (z > -TERRACE_DEPTH).")]
     [SerializeField] Vector3 _terraceCamera = new Vector3(12f, -15f, 22f);
     [SerializeField] bool _logJumps;
@@ -72,6 +78,7 @@ public partial class ElfGame : MonoBehaviour
     readonly List<Camera> _cameras = new List<Camera>();
     readonly List<Pose> _cameraPoses = new List<Pose>(); // game pose of each camera (the splash moves in to it)
     readonly List<float> _viewS = new List<float>(); // path distance each camera aims at
+    float[] _camShake = new float[0]; // light shake per screen when one of its players lands
     readonly List<ElfHud> _huds = new List<ElfHud>();
     readonly Dictionary<int, KeyValuePair<ElfStation, int>> _byTrampoline = new Dictionary<int, KeyValuePair<ElfStation, int>>();
     readonly Dictionary<int, float> _lastLand = new Dictionary<int, float>();
@@ -86,6 +93,7 @@ public partial class ElfGame : MonoBehaviour
     float _sleighPunch;
     Transform _boardsRoot, _bin;
     bool _tutorialDone;
+    ElfSquash _spawnerPop; // the toy spawner pops (stretch, squash) at each box
     readonly ElfOccluders _occluders = new ElfOccluders();
     readonly List<Renderer> _decor = new List<Renderer>();
     float _beltY = 1.2f, _spawnX = 1.5f, _beltFrontZ = -1f;
@@ -107,6 +115,7 @@ public partial class ElfGame : MonoBehaviour
     {
         Instance = this;
         ElfArt.Assets = _assets;
+        ElfToy.BoxSize = _boxSize; ElfToy.CarvedScale = _carvedScale; ElfToy.PaintedScale = _paintedScale; ElfToy.GiftScale = _giftScale;
         _config = PleyoDLL_ConfigurationFileExtended.LoadConfigurationData();
         if (_config != null)
         {
@@ -133,6 +142,10 @@ public partial class ElfGame : MonoBehaviour
         _boardsRoot.SetParent(_world, false);
         _boards.Build(_boardsRoot, _teams.Count, _screens.Count == 1 ? loader : null, _stations, GetPlayerColor, GetPlayerLetter, _beltY - 0.05f, _beltFrontZ - 0.03f);
         BuildViews();
+        ApplyLighting();
+        StartMusic();
+        if (_ceremonyDecor != null) _ceremonyDecor.SetActive(false);
+        if (_ceremonyCamera != null) _ceremonyCamera.enabled = false;
         ElfInput.OnPlayerJump += OnPlayerJump;
         ElfInput.OnPlayerLand += OnPlayerLand;
         Debug.Log($"ElfGame: {_screens.Count} screen(s), {_stations.Count} station(s), input {_inputMethod}, BPM {_configBpm}");
@@ -143,6 +156,7 @@ public partial class ElfGame : MonoBehaviour
         ElfInput.OnPlayerJump -= OnPlayerJump;
         ElfInput.OnPlayerLand -= OnPlayerLand;
         _occluders.Dispose();
+        if (_facingHooked) UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering -= FaceLabels;
         if (Instance == this) Instance = null;
     }
 
@@ -173,11 +187,16 @@ public partial class ElfGame : MonoBehaviour
             _playTimer += dt;
             // Splash: the logo over the scene, each camera gliding down from above (never backward: walls) to its view.
             splash = _playTimer < _splashSeconds ? _playTimer / _splashSeconds : -1f;
+            if (splash >= 0f && !_splashSound) { _splashSound = true; PlaySfx(_sounds.Splash); }
             for (int i = 0; i < _cameras.Count && i < _cameraPoses.Count; i++)
             {
                 Pose game = _cameraPoses[i];
                 float k = splash >= 0f ? 1f - Mathf.SmoothStep(0f, 1f, splash) : 0f;
-                _cameras[i].transform.SetPositionAndRotation(game.position + game.rotation * new Vector3(0f, 6f, 2f) * k, game.rotation * Quaternion.Euler(28f * k, 0f, 0f));
+                // Screen shake: strong during a malfunction, light when a player of this screen lands.
+                if (i < _camShake.Length) _camShake[i] = Mathf.MoveTowards(_camShake[i], 0f, dt * 4f);
+                float shake = EventShake * 0.14f + (i < _camShake.Length ? _camShake[i] : 0f) * 0.05f;
+                Vector3 jitter = shake > 0f ? new Vector3(Mathf.PerlinNoise(time * 23f, i) - 0.5f, Mathf.PerlinNoise(i, time * 23f) - 0.5f, 0f) * 2f * shake : Vector3.zero;
+                _cameras[i].transform.SetPositionAndRotation(game.position + game.rotation * (new Vector3(0f, 6f, 2f) * k + jitter), game.rotation * Quaternion.Euler(28f * k, 0f, jitter.x * 6f));
             }
             // Tutorial: one card (rules, unfinished gift, time gauge, jump check of the screen's players). A player
             // who does not jump during it stays inactive until his first jump.
@@ -192,6 +211,7 @@ public partial class ElfGame : MonoBehaviour
             else if (_playTimer < introSeconds)
             {
                 message = Mathf.CeilToInt(introSeconds - _playTimer).ToString();
+                CountdownTick(Mathf.CeilToInt(introSeconds - _playTimer));
                 // The line already runs: ghost toys, transformed on their own, playable at "Go!".
                 if (!_prefilled) Prefill();
                 UpdateSpawn(dt, 0f);
@@ -200,12 +220,13 @@ public partial class ElfGame : MonoBehaviour
             else
             {
                 playing = true;
-                if (!_lineLive) GoLive();
+                if (!_lineLive) { GoLive(); PlaySfx(_sounds.Go); }
                 float elapsed = _playTimer - introSeconds;
                 float remaining = Mathf.Max(0f, _playSeconds - elapsed);
                 if (elapsed < 1.2f) { message = ElfLoc.Get("GO"); big = true; }
-                else if (remaining > 0f && remaining <= 3f) { message = Mathf.CeilToInt(remaining).ToString(); big = true; } // last 3 s
+                else if (remaining > 0f && remaining <= 3f) { message = Mathf.CeilToInt(remaining).ToString(); big = true; CountdownTick(Mathf.CeilToInt(remaining)); } // last 3 s
                 timer = $"{(int)remaining / 60}:{(int)remaining % 60:00}";
+                UpdateMalfunction(elapsed, ref message, ref big);
                 UpdateSpawn(dt, elapsed);
                 if (remaining <= 0f && PleyoGameManagerTemplate.Instance == null) _ownGameOver = true;
             }
@@ -214,6 +235,8 @@ public partial class ElfGame : MonoBehaviour
         WindowX = Mathf.Max(WINDOW_SECONDS_MIN, 0.6f * GetEffectivePeriod()) * _beltSpeed;
         UpdateToys(dt);
         TickFlights(dt);
+        _spawnerPop?.Tick(dt);
+        TickMusic(dt, _endTime >= END_PAUSE);
         ElfToy.TickGlows(dt);
         if (_beltMaterial != null && _workshop != null)
             _beltMaterial.mainTextureOffset += _workshop.BeltScroll * (_beltSpeed * dt);
@@ -236,7 +259,8 @@ public partial class ElfGame : MonoBehaviour
                 jumped[p] = _byTrampoline.TryGetValue(players[p], out KeyValuePair<ElfStation, int> slot) && slot.Key.IsMemberActive(slot.Value);
             _huds[i].SetTutorial(tutorial, 1f - (_playTimer - _splashSeconds) / _tutorialSeconds, jumped);
             _huds[i].SetSplash(splash);
-            _huds[i].ShowStats(playing || _podiumBuilt); // gifts card: during the play and on the podium
+            _huds[i].SetBigShake(AlarmText ? 1f : 0f); // malfunction title shakes
+            _huds[i].ShowStats(playing); // gifts card during the play (the end board takes over)
         }
     }
     #endregion
@@ -250,6 +274,7 @@ public partial class ElfGame : MonoBehaviour
         bool finished = !toy.Unfinished && (toy.Done & (ElfToy.CARVE | ElfToy.PAINT | ElfToy.WRAP)) == (ElfToy.CARVE | ElfToy.PAINT | ElfToy.WRAP);
         if (finished) Gifts++;
         else UnfinishedLoaded++;
+        PlaySfx(finished ? _sounds.GiftDelivered : _sounds.UnfinishedLoaded);
         foreach (TMPro.TextMeshPro label in _sleighLabels) label.text = Gifts.ToString();
         _sleighPunch = 1f;
     }
@@ -294,6 +319,7 @@ public partial class ElfGame : MonoBehaviour
     #region Input
     void OnPlayerJump(int trampolineId)
     {
+        if (_endTime > 0f) return; // end of the game: the elves celebrate, no more jumps
         if (!_byTrampoline.TryGetValue(trampolineId, out KeyValuePair<ElfStation, int> slot)) return;
         EGameState state = GetGameState();
         // Keyboard / touch don't go through the template's "jump to join": mark the player ready ourselves.
@@ -306,12 +332,17 @@ public partial class ElfGame : MonoBehaviour
             int tile = _screens[s].Value.IndexOf(trampolineId);
             if (tile >= 0) _huds[s].PulseTile(tile);
         }
+        bool joining = !slot.Key.IsMemberActive(slot.Value);
         slot.Key.OnJump(slot.Value, Time.time, _airSeconds);
+        PlaySfx(joining ? _sounds.Join : _sounds.Jump);
     }
 
     void OnPlayerLand(int trampolineId, float jumpStrength01)
     {
+        if (_endTime > 0f) return;
         if (!_byTrampoline.TryGetValue(trampolineId, out KeyValuePair<ElfStation, int> slot)) return;
+        for (int s = 0; s < _screens.Count && s < _camShake.Length; s++)
+            if (_screens[s].Value.Contains(trampolineId)) _camShake[s] = 1f;
         float time = Time.time;
         // Measured jump period of this player (slower bounces = longer period = slower line).
         float configPeriod = 60f / _configBpm;
@@ -325,6 +356,7 @@ public partial class ElfGame : MonoBehaviour
             Debug.Log($"ElfGame: land {GetPlayerLetter(trampolineId)} air {time - jumpTime:0.00}s strength {jumpStrength01:0.00}");
         _lastLand[trampolineId] = time;
         slot.Key.OnLand(slot.Value, time, _toys);
+        PlaySfx(_sounds.Land);
     }
 
     /// <summary>Development keys 1..9, 0, -, = : trampolines A..L jump (landing after the config air time); Space: all.
@@ -388,10 +420,14 @@ public partial class ElfGame : MonoBehaviour
         _spawnTimer -= dt;
         if (_spawnTimer > 0f) return;
         int[] beats = elapsed < 30f ? new[] { 3, 4, 4, 5 } : elapsed < 80f ? new[] { 2, 3, 3, 4 } : new[] { 2, 2, 3, 3, 4 };
-        _spawnTimer = beats[Random.Range(0, beats.Length)] * GetEffectivePeriod() * SpawnFactor();
+        _spawnTimer = beats[Random.Range(0, beats.Length)] * GetEffectivePeriod() * SpawnFactor() * (MalfunctionActive ? _malfunctionSpawnFactor : 1f);
         ElfToy toy = new ElfToy();
         toy.Init(_world, _spawnX, _beltY, _spawned++ % 2);
         toy.SetGhost(!_lineLive);
+        // Cartoon pop of the spawner and a burst of light where the box comes out.
+        _spawnerPop?.Punch();
+        PlaySfx(_sounds.Spawn);
+        ElfArt.Sparkle(ElfPath.Point(_spawnX, new Vector3(0f, _beltY + 0.6f, 0f)), new Color(1f, 0.85f, 0.4f));
         _toys.Add(toy);
         RefreshOwner(toy);
     }
@@ -773,6 +809,11 @@ public partial class ElfGame : MonoBehaviour
             _bin = Instantiate(_assets.BinPrefab, _world, false).transform;
             PlaceOnPath(_bin, _endX + 1.15f, Vector3.zero);
         }
+        if (_workshop != null)
+        {
+            Transform spawner = _workshop.transform.Find("SpawnerPivot/SpawnerMachine") ?? _workshop.transform.Find("SpawnerMachine");
+            if (spawner != null) { _spawner = spawner; _spawnerPop = new ElfSquash(spawner, -0.14f); }
+        }
         // Indoor light only: the sun (directional lights) and the sky reflections would light the room from outside.
         // Decor that may block a camera (ElfOccluders): everything of the map but its floor and belt.
         if (_workshop != null)
@@ -840,6 +881,7 @@ public partial class ElfGame : MonoBehaviour
         int columns = count <= 1 ? 1 : 2;
         int rows = count <= 2 ? 1 : 2;
         Sprite[] stepIcons = ElfIcons.ToySteps();
+        _camShake = new float[count];
         for (int s = 0; s < count; s++)
         {
             int displayId = Application.isEditor ? s : _screens[s].Key;
@@ -884,6 +926,8 @@ public partial class ElfGame : MonoBehaviour
             urp.antialiasing = AntialiasingMode.FastApproximateAntialiasing;
             urp.renderPostProcessing = true;
             _cameras.Add(cam);
+            // The scene has no active audio listener (template cameras off): screen 1's camera hears the music.
+            if (s == 0 && FindAnyObjectByType<AudioListener>() == null) camObject.AddComponent<AudioListener>();
 
             GameObject hudObject = new GameObject($"Screen{s}_Hud", typeof(RectTransform));
             hudObject.transform.SetParent(camObject.transform, false);

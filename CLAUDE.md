@@ -172,3 +172,33 @@ In `SplitScreenWithDynamicWidth Variant`:
   `---- Workshop Ring ----/GiftSocle`, the user's cylinder), stacked in sunflower layers; no sleighs then.
 - Countdown: the belt is pre-filled with ghost toys (75% transparent copies of the materials), transformed on their
   own by the machines they pass, not playable; at "Go!" they become normal toys, so every machine has toys at once.
+- Juice (`ElfSquash`): the machine / claw squashes a little when an elf lands on it; the toy spawner pops (stretch then
+  squash) with a light burst at each box. Ring camera 7.4 / -19.62 / 7°; player boards at 0.0065 m/px (clear the floor).
+- Mood lighting (`ElfGameLight.cs`, runtime, `ElfGame._moodLighting`): warm spot per team, three-colour ambient (dim
+  cool top, warm floor), garlands x4 emission + bloom (threshold 1: white HUD cards don't bloom), moonlit glass / sky
+  with small blue lights at the windows (12 max), vignette, linear haze 35-90 m. Settings on ElfGame (Lighting).
+- Lights: a narrow spot above each player (`_playerSpotIntensity`), a wide one only above a team with no player. The
+  socle spot is the user's (`---- Workshop Ring ----/Lights/Spot Light`, tuned 2026-11-26: y 12, 62°, 45, soft shadows).
+- Gift pile: grid cells, every other layer shifted half a cell and narrower (stepped pyramid), filled from the centre;
+  each parked gift aligned and scaled to the layer height (0.66).
+- Event (`ElfGameEvent.cs`): twice per game (at ~28-40% and ~65-76% of the play) the spawner malfunctions for
+  10-15 s: shakes / wobbles (`ElfSquash.SetShake`), sparks, red flashing light, boxes x2.2 faster, big message.
+- Ending on ring / terraces: no podium; one camera for every screen (from screen 1's side), the teams on the floor in
+  front of the socle (front-left / front-right, best ranks in the middle), all facing it, a big "gifts delivered" label
+  above the pile; no jumps from game over (celebration). (Older note: each team on its screen's side, rank /
+  step / score labels turned to each camera as it renders; every camera moves in on the socle. 1 screen: podium.
+- Malfunction also shakes the belt object and flickers every light (restored after), the title shakes and flashes
+  (`ElfHud.SetBigShake`). Music (`ElfGameAudio.cs`): `_mainMusic` = Assets/Xmas_Christmas_Song_Loop (pitch 1.2 during a
+  malfunction), `_endMusic` (empty for now) crossfades in at the white fade.
+- 2026-11-26: audio listener added on screen 1's camera (the scene had none: no sound); end music =
+  Mobile Games Bundle/.../Music_Box/Loop/MUSC_Toy_MusicBox_JingleBells_Loop_1. Malfunction: belt tiles sway sideways out
+  of phase, toys hop (`ElfToy.Jolt`), lights turn red in waves, screen shake (`EventShake`); light camera shake on each
+  landing of the screen's players. End: one camera, a straight row of elves in front of the socle (gap in the middle),
+  HUD board `UI/CeremonyBoard.png` (cut out of the user's picture by `ElfImageTools.CutOutWhite`) with the gifts and the
+  unfinished gifts; round gauge top right.
+- Sounds (`ElfGameSfx.cs`): ElfGame > Sounds (SFX): one entry per action (clip, volume, pitch variation) + master volume;
+  defaults picked from the project's packs (Christmas / Comedy Cartoon / Collectibles). 12 pooled 2D sources + 1 loop.
+- Ceremony: `---- Workshop Ring ----/Ceremony Camera` (pose + FOV used by every screen; renders to Display 8 in the
+  editor, disabled in game) and `Décors cérémonie` (children shown only at the end), both on ElfGame (End ceremony).
+- Toys: ElfGame > Toys: box height (m) and a scale per stage (carved, painted, gift). The button glows a little (30%)
+  at each jump, fully when the machine transforms a toy.

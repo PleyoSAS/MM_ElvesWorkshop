@@ -59,6 +59,7 @@ public class ElfHud : MonoBehaviour
 
         BuildStats();
         BuildSplash();
+        BuildBoard();
         BuildEnding();
     }
 
@@ -265,6 +266,70 @@ public class ElfHud : MonoBehaviour
     }
     #endregion
 
+
+    #region Ceremony board
+    GameObject _board;
+    TextMeshProUGUI _boardGifts, _boardUnfinished;
+
+    /// <summary>End board (ElfAssets.CeremonyBoard, top centre): "Gifts delivered" and the score in big letters on the
+    /// main board, unfinished gifts (grey gift icon + "?", score) on the hanging plank.</summary>
+    void BuildBoard()
+    {
+        ElfAssets a = ElfArt.Assets;
+        const float W = 640f, H = W * 1342f / 2000f;
+        _board = new GameObject("CeremonyBoard", typeof(RectTransform));
+        _board.transform.SetParent(transform, false);
+        RectTransform r = (RectTransform)_board.transform;
+        r.anchorMin = r.anchorMax = r.pivot = new Vector2(0.5f, 1f);
+        r.anchoredPosition = new Vector2(0f, -10f);
+        r.sizeDelta = new Vector2(W, H);
+        Image image = _board.AddComponent<Image>();
+        image.sprite = a != null ? a.CeremonyBoard : null;
+        image.color = image.sprite != null ? Color.white : new Color32(0x6B, 0x3F, 0x22, 255);
+        image.raycastTarget = false;
+        Color cream = new Color32(0xFF, 0xEB, 0xC8, 255);
+        // Main board (interior around the middle of the picture).
+        _boardGifts = Text(_board.transform, "Gifts", 40f, TextAlignmentOptions.Center, cream);
+        PlaceIn(_boardGifts.rectTransform, new Vector2(0f, -0.005f * H), new Vector2(0.66f * W, 0.36f * H));
+        _boardGifts.lineSpacing = -20f;
+        if (a != null && a.FontBlackOutline != null) _boardGifts.fontSharedMaterial = a.FontBlackOutline;
+        // Hanging plank: icon + unfinished gifts.
+        Image icon = Child(_board.transform, "UnfinishedIcon", Vector2.zero, a != null ? a.GiftIcon : null, a != null && a.GiftIcon != null ? ElfArt.Unfinished : new Color(0f, 0f, 0f, 0f));
+        icon.preserveAspect = true;
+        PlaceIn((RectTransform)icon.transform, new Vector2(-0.17f * W, -0.326f * H), new Vector2(0.075f * H * 1.6f, 0.075f * H * 1.6f));
+        TextMeshProUGUI mark = Text(icon.transform, "Mark", 34f, TextAlignmentOptions.Center, new Color(1f, 0.2f, 0.2f));
+        if (a != null && a.FontBlackOutline != null) mark.fontSharedMaterial = a.FontBlackOutline;
+        mark.text = "?";
+        _boardUnfinished = Text(_board.transform, "Unfinished", 19f, TextAlignmentOptions.Left, cream);
+        _boardUnfinished.textWrappingMode = TextWrappingModes.NoWrap;
+        PlaceIn(_boardUnfinished.rectTransform, new Vector2(0.045f * W, -0.326f * H), new Vector2(0.36f * W, 0.1f * H));
+        _boardUnfinished.enableAutoSizing = true;
+        _boardUnfinished.fontSizeMin = 12f;
+        _boardUnfinished.fontSizeMax = 22f;
+        _board.SetActive(false);
+    }
+
+    static void PlaceIn(RectTransform r, Vector2 fromCentre, Vector2 size)
+    {
+        r.anchorMin = r.anchorMax = r.pivot = new Vector2(0.5f, 0.5f);
+        r.anchoredPosition = fromCentre;
+        r.sizeDelta = size;
+    }
+
+    /// <summary>Shows the end board with the final scores (pops in); hide with show = false.</summary>
+    public void ShowBoard(bool show, int gifts, int unfinished)
+    {
+        if (_board.activeSelf != show) _board.SetActive(show);
+        if (!show) return;
+        _boardGifts.text = $"<size=70%>{ElfLoc.Get("GIFTS")}</size>\n<size=230%><color=#FACC15>{gifts}</color></size>";
+        _boardUnfinished.text = $"{ElfLoc.Get("UNFINISHED")}  <size=140%>{unfinished}</size>";
+        _boardPop = Mathf.MoveTowards(_boardPop, 1f, Time.deltaTime * 3f);
+        float k = 1f - Mathf.Pow(1f - _boardPop, 3f);
+        _board.transform.localScale = Vector3.one * (0.6f + 0.4f * k + Mathf.Sin(_boardPop * Mathf.PI) * 0.06f);
+    }
+
+    float _boardPop;
+    #endregion
     #region Ending (white fade, podium gauge, iris)
     Image _white, _gauge;
     RectTransform _iris;
@@ -278,9 +343,9 @@ public class ElfHud : MonoBehaviour
         _gaugeRoot = new GameObject("PodiumGauge", typeof(RectTransform));
         _gaugeRoot.transform.SetParent(transform, false);
         RectTransform gr = (RectTransform)_gaugeRoot.transform;
-        gr.anchorMin = gr.anchorMax = new Vector2(0.5f, 1f);
-        gr.pivot = new Vector2(0.5f, 1f);
-        gr.anchoredPosition = new Vector2(0f, -24f);
+        gr.anchorMin = gr.anchorMax = new Vector2(1f, 1f); // top right (the end board takes the top centre)
+        gr.pivot = new Vector2(1f, 1f);
+        gr.anchoredPosition = new Vector2(-40f, -30f);
         gr.sizeDelta = new Vector2(170f, 170f);
         Image back = _gaugeRoot.AddComponent<Image>();
         back.sprite = a != null ? a.Disc : null;
@@ -501,6 +566,21 @@ public class ElfHud : MonoBehaviour
         if (_big.gameObject.activeSelf != (show && big)) _big.gameObject.SetActive(show && big);
         TextMeshProUGUI target = big ? _big : _message;
         if (show && target.text != text) target.text = text;
+    }
+
+    float _bigShake;
+
+    /// <summary>0 to 1: the big text shakes, wobbles, pulses and flashes red / orange (machine malfunction).</summary>
+    public void SetBigShake(float amount)
+    {
+        if (amount <= 0f && _bigShake <= 0f) return;
+        _bigShake = amount;
+        RectTransform r = _big.rectTransform;
+        float t = Time.time;
+        r.anchoredPosition = new Vector2(0f, 150f) + (amount > 0f ? new Vector2(UnityEngine.Random.Range(-14f, 14f), UnityEngine.Random.Range(-10f, 10f)) * amount : Vector2.zero);
+        r.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(t * 31f) * 7f * amount);
+        r.localScale = Vector3.one * (1f + Mathf.Abs(Mathf.Sin(t * 11f)) * 0.18f * amount);
+        _big.color = amount > 0f ? (Mathf.PingPong(t * 8f, 1f) > 0.5f ? new Color(1f, 0.25f, 0.15f) : new Color(1f, 0.7f, 0.1f)) : Color.white;
     }
 
     static GameObject CardBox(Transform parent, string name, Vector2 anchor, Vector2 pivot, Vector2 position, Vector2 size)

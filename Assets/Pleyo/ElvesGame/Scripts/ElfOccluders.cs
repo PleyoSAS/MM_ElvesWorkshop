@@ -46,6 +46,13 @@ public class ElfOccluders
         foreach (Camera cam in cameras) _hidden[cam] = set;
     }
 
+    public void Clear()
+    {
+        foreach (Renderer r in _all) if (r != null) r.forceRenderingOff = false;
+        _hidden.Clear();
+        _all.Clear();
+    }
+
     public void Dispose()
     {
         if (_hooked) RenderPipelineManager.beginCameraRendering -= OnBeginCamera;

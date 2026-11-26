@@ -73,6 +73,7 @@ public class ElfStation
     bool _onMachine;
     float _standY, _standZ;
     public TextMeshPro CounterLabel;
+    ElfSquash _squash; // the machine / claw squashes a little when an elf lands on it
 
     public void Build(ElfGame game, int index, int steps, List<int> members, float machineX, Transform root, float beltY, float[] offsets, Transform scene)
     {
@@ -131,6 +132,7 @@ public class ElfStation
                 claw.localPosition = new Vector3(claw.localPosition.x, claw.localPosition.y, Mathf.Abs(claw.localPosition.z));
                 claw.localRotation = Quaternion.identity;
             }
+            _squash = new ElfSquash(claw, 0.04f);
             _arm = claw.Find("Arm");
             _claw = _arm.Find("Claw");
             _cable = _claw.Find("Cable");
@@ -198,6 +200,7 @@ public class ElfStation
             if (machine == null) machine = Object.Instantiate(a.MachinePrefab, station, false).transform;
             _piston = machine.Find("Piston");
             _pistonRestY = _piston != null ? _piston.localPosition.y : 0f;
+            _squash = new ElfSquash(machine, 0.06f);
             Transform stripe = machine.Find("Stripe");
             if (stripe != null) ElfArt.SetColor(stripe.gameObject, stepColor);
             // One player on the station: the piston takes the player color.
@@ -268,6 +271,7 @@ public class ElfStation
     public void OnLand(int member, float time, List<ElfToy> toys)
     {
         Activate(member, time);
+        _squash?.Punch();
         Avatars[member].Land();
         _lastLand[member] = time;
 
@@ -336,6 +340,8 @@ public class ElfStation
         // The buttons and the transformed toy light up together (visual link).
         for (int i = 0; i < Avatars.Count; i++) Avatars[i].Glow();
         best.Glow(Members.Count > 0 ? _memberColors[0] : Color.white);
+        ElfSoundSet sounds = _game.Sounds;
+        _game.PlaySfx(IsLoader ? sounds.ClawGrab : FirstStep(Steps) == 0 ? sounds.Carve : FirstStep(Steps) == 1 ? sounds.Paint : sounds.Wrap);
         if (IsLoader)
         {
             // The bot never loads a toy that was not wrapped.
@@ -370,7 +376,7 @@ public class ElfStation
         for (int i = 0; i < _lastSeen.Length; i++) _lastSeen[i] = time;
     }
 
-    public void ShowMissed() { ShowSign(ElfLoc.Get("MISSED"), new Color(1f, 0.3f, 0.25f)); }
+    public void ShowMissed() { ShowSign(ElfLoc.Get("MISSED"), new Color(1f, 0.3f, 0.25f)); _game.PlaySfx(_game.Sounds.Missed); }
 
     public void SetCrown(bool on)
     {
@@ -386,6 +392,7 @@ public class ElfStation
 
     public void Tick(float deltaTime, float time, bool playing, List<ElfToy> toys)
     {
+        _squash?.Tick(deltaTime);
         // No active player: the machine runs on its own, no character shown (absent elves are hidden, their "Jump to
         // play" pill stays). With 2 machines on the step it only takes its own lane.
         if (playing && !HasActiveHuman())

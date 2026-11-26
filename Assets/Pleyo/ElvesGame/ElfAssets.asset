@@ -70,5 +70,7 @@ MonoBehaviour:
   Rounded: {fileID: 21300000, guid: 88092994fb8047e4c89a589df3c59be8, type: 3}
   Disc: {fileID: 21300000, guid: 88b9b724fc18fdf4c907afd74669df7b, type: 3}
   GiftIcon: {fileID: 21300000, guid: 3249068b4ac3a7f4781a02568492e69f, type: 3}
+  Logo: {fileID: 0}
+  CeremonyBoard: {fileID: 21300000, guid: e721236d880a10e43928dbe7b626479c, type: 3}
   WoodPanel: {fileID: 21300000, guid: c905264d5c029684ea4a61faf8e9be7b, type: 3}
   Paper: {fileID: 21300000, guid: a03bc8dcd8db7014c8de82e1e654f8a8, type: 3}

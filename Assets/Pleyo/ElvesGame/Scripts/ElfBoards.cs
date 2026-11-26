@@ -13,7 +13,7 @@ public class ElfBoards
     readonly List<TextMeshProUGUI> _teams = new List<TextMeshProUGUI>();
     readonly List<Image> _teamPapers = new List<Image>();
 
-    const float BELT_PX = 0.009f; // player boards on the belt front
+    const float BELT_PX = 0.0065f; // player boards on the belt front (short enough to clear the floor)
 
 
     /// <summary>Team boards on the front of the loader's sleigh row (line order left to right, Load on the sleigh under

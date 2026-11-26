@@ -12,7 +12,8 @@ public partial class ElfGame
     [Tooltip("Ring / terraces: socle in the middle of the hall where the claws throw the gifts (empty: sleighs).")]
     [SerializeField] Transform _giftSocle;
 
-    const int PILE_LAYER = 28;
+    const float PILE_CELL = 0.74f, PILE_LAYER_H = 0.66f; // a parked gift: 75% of the raw box size
+    readonly List<Vector3> _pileSpots = new List<Vector3>();
     const float FLIGHT_SECONDS = 1f, FLIGHT_ARC = 5f;
     Transform _giftPile;
     float _pileRadius;
@@ -29,6 +30,7 @@ public partial class ElfGame
         _giftPile = new GameObject("GiftPile").transform;
         _giftPile.position = new Vector3(b.center.x, b.max.y, b.center.z);
         _pileRadius = Mathf.Max(0.5f, Mathf.Min(b.extents.x, b.extents.z) - 0.6f);
+        BuildPileSpots();
         foreach (ElfStation station in _stations) if (station.IsLoader) station.HideSleighs();
     }
 
@@ -37,13 +39,36 @@ public partial class ElfGame
     {
         if (_giftPile == null) return false;
         // Next spot of the pile: a sunflower spiral per layer, layers stacked.
-        int k = _pileCount++, layer = k / PILE_LAYER, j = k % PILE_LAYER;
-        float r = _pileRadius * Mathf.Sqrt((j + 0.5f) / PILE_LAYER), angle = j * 2.39996f + layer * 0.7f;
-        Vector3 local = new Vector3(Mathf.Cos(angle) * r, layer * 0.62f, Mathf.Sin(angle) * r);
+        // Next spot of the stack (grid cells, filled from the centre so the pile grows as a stepped pyramid).
+        Vector3 local = _pileSpots.Count > 0 ? _pileSpots[Mathf.Min(_pileCount++, _pileSpots.Count - 1)] : Vector3.zero;
         _flights.Add(new Flight { Toy = toy, From = toy.Root.position, Local = local });
+        PlaySfx(_sounds.ClawThrow);
         return true;
     }
 
+
+    /// <summary>Stack spots: square cells on each layer, every other layer shifted by half a cell (each gift sits on
+    /// four below it) and narrower; ordered so a spot comes after the cells that hold it.</summary>
+    void BuildPileSpots()
+    {
+        List<KeyValuePair<float, Vector3>> spots = new List<KeyValuePair<float, Vector3>>();
+        for (int layer = 0; layer < 12; layer++)
+        {
+            float r = _pileRadius - layer * PILE_CELL * 0.5f;
+            if (r < PILE_CELL * 0.5f) break;
+            float offset = (layer % 2) * PILE_CELL * 0.5f;
+            int n = Mathf.CeilToInt(r / PILE_CELL) + 1;
+            for (int gx = -n; gx <= n; gx++)
+                for (int gz = -n; gz <= n; gz++)
+                {
+                    Vector3 p = new Vector3(gx * PILE_CELL + offset, layer * PILE_LAYER_H, gz * PILE_CELL + offset);
+                    float d = new Vector2(p.x, p.z).magnitude;
+                    if (d <= r) spots.Add(new KeyValuePair<float, Vector3>(d / PILE_CELL + layer * 1.5f, p));
+                }
+        }
+        spots.Sort((a, b) => a.Key.CompareTo(b.Key));
+        foreach (KeyValuePair<float, Vector3> s in spots) _pileSpots.Add(s.Value);
+    }
     void TickFlights(float dt)
     {
         for (int i = _flights.Count - 1; i >= 0; i--)
@@ -57,7 +82,10 @@ public partial class ElfGame
             f.Toy.Root.Rotate(0f, 540f * dt, 0f, Space.World);
             if (t < 1f) continue;
             _flights.RemoveAt(i);
-            f.Toy.Park(_giftPile, f.Local);
+            f.Toy.Park(_giftPile, f.Local, true);
+            // Same height for every gift (a clean layer), never wider than its cell.
+            Bounds gb = ElfArt.GetBounds(f.Toy.Root.gameObject);
+            if (gb.size.y > 0.01f) f.Toy.Root.localScale *= Mathf.Min(PILE_LAYER_H / gb.size.y, (PILE_CELL - 0.04f) / Mathf.Max(0.01f, Mathf.Max(gb.size.x, gb.size.z)));
             LoadToy(f.Toy);
             ElfArt.Sparkle(to + Vector3.up * 0.5f, ElfArt.Gold);
         }
