@@ -97,3 +97,6 @@ cublas64_11.dll
 
 # Claude Code personal preferences
 CLAUDE.local.md
+
+# Local builds
+/Build/
